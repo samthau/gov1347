@@ -94,22 +94,22 @@ electoral votes, like Maine and Nebraska currently do. It also does not
 account for faithless electors. This calculation *does* account for
 changing electoral college values over time.
 
-    ##    Tipping Point State Election
-    ## 1             Illinois     1948
-    ## 2             Michigan     1952
-    ## 3            Louisiana     1956
-    ## 4           New Jersey     1960
-    ## 5           Washington     1964
-    ## 6                 Ohio     1968
-    ## 7                 Ohio     1972
-    ## 8            Wisconsin     1976
-    ## 9             Illinois     1980
-    ## 10            Michigan     1984
-    ## 11            Michigan     1988
-    ## 12            Colorado     1992
-    ## 13        Pennsylvania     1996
-    ## 14             Florida     2000
-    ## 15                Ohio     2004
-    ## 16            Colorado     2008
-    ## 17        Pennsylvania     2012
-    ## 18        Pennsylvania     2016
+        Tipping Point State Election
+     1             Illinois     1948
+     2             Michigan     1952
+     3            Louisiana     1956
+     4           New Jersey     1960
+     5           Washington     1964
+     6                 Ohio     1968
+     7                 Ohio     1972
+     8            Wisconsin     1976
+     9             Illinois     1980
+     10            Michigan     1984
+     11            Michigan     1988
+     12            Colorado     1992
+     13        Pennsylvania     1996
+     14             Florida     2000
+     15                Ohio     2004
+     16            Colorado     2008
+     17        Pennsylvania     2012
+     18        Pennsylvania     2016
