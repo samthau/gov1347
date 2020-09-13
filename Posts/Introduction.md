@@ -36,7 +36,7 @@ always wins the state and therefore the electoral votes.
 
 Looking at the voting margins in general can be deceptive: because
 states are mostly winner-take-all, a narrow win counts the same as a
-blowout in terms of results. For example, in 1972, **Richard Nixon**
+blowout in terms of results. For example, in `1972`, **Richard Nixon**
 beat **George McGovern** by `59.9` percentage points in Mississippi,
 meaning that if **185k people** switched their votes from Nixon to
 McGovern, Nixon *still* would have won Mississippi and it’s electoral
@@ -55,7 +55,7 @@ Democrat since `1976`, and Minnesota has not voted for a Republican since
 throughout the blog.
 
 A key part of the trend that I am interested in is the geographic
-components of this polarizaiton: since 1992, the west coast and
+components of this polarizaiton: since `1992`, the west coast and
 northeast have reliably voted for Democrats, while much of the center of
 the country has voted for Republicans. Understanding what drives this
 trend is crucial to predicitng future elections, as it may give
@@ -73,7 +73,7 @@ value by taking the total number of electoral votes, dividing by 2 and
 then adding 1.
 
 Then, to figure out the tipping point state, we order the states by net
-vote share. For example, in 2016, Donald Trump won `72.1` of the vote in
+vote share. For example, in `2016`, Donald Trump won `72.1` of the vote in
 West Virginia, so that would be the first state on his list. The rest of
 the states are ordered by the margin they voted for or against Trump,
 keeping track of the electoral college votes for each state. From there,
@@ -90,17 +90,18 @@ for each state with the two party vote shares from Lab 1. There are some
 distinct drawbacks to using two party vote share, instead of raw vote
 share:
 
-1.  In 1948 and 1964, Alabama refused to put Harry Truman and Lyndon B.
+1.  In `1948` and `1964`, Alabama refused to put Harry Truman and Lyndon B.
     Johnson, respectively, on the ballot. The electoral votes were not
     pledged, so I set the Alabama electoral college votes for those
     years to zero.
 
 2.  Some third party candidates have won small numbers of electoral
     votes, which will not be accounted for with the two party vote
-    share. Strom Thurmond in 1948, and George Wallace in 1968 were the
+    share. Strom Thurmond in `1948`, and George Wallace in `1968` were the
     only third party candidates to pick up electoral votes. Becuase I am
     using the two party vote share, I set the electoral college values
-    of the states they won to zero as well.
+    of the states they won to zero because they did not go to major party
+    candidates.
 
 3.  The two party vote share margins may not be the same as the raw vote
     share margins, leading to discrepencies in actual calculations.
@@ -139,7 +140,7 @@ table:
 
 1.  Which states matter in terms of the overall outcomes of elections.
     These states roughly line up with the popular idea of which states
-    are “swing states.” In 2020, Michigan, Ohio, and Pennsylvania are
+    are “swing states.” In `2020`, Michigan, Ohio, and Pennsylvania are
     all like to be important. According to
     [FiveThirtyEight](https://projects.fivethirtyeight.com/swing-states-2020-election/)
     all three have swung during the past two elections, and Pennsylvania
@@ -147,11 +148,11 @@ table:
     [projected](https://projects.fivethirtyeight.com/2020-election-forecast/)
     to be the tipping point state.
 
-2.  Which elections were competitive, in one sense. We can see that 2000
-    and 2016 had razor thin margins in Florida and Pennsylvania,
+2.  Which elections were competitive, in one sense. We can see that `2000`
+    and `2016` had razor thin margins in Florida and Pennsylvania,
     respecitively, demonstrating the extraordinarily competitive
     elections. On the opposite end of the spectrum, Lyndon B. Johnson
-    trounced Barry Goldwater in 1964, as clearly indicated by Johson
+    trounced Barry Goldwater in `1964`, as clearly indicated by Johson
     winning the tipping point state by nearly 25 percentage points.
 
 3.  Close results in the tipping point state do not neccesarily imply
