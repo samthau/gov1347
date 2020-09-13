@@ -1,0 +1,217 @@
+---
+title: "Introduction: Electoral Results and Tipping Points"
+author: "Samuel Thau"
+date: "9/12/2020"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(ggplot2)
+library(usmap)
+
+## read in state pop vote
+pvstate_df <- read_csv("../Data/popvote_bystate_1948-2016.csv")
+pvstate_df$full <- pvstate_df$state
+
+## shapefile of states from `usmap` library
+## note: `usmap` merges this internally, but other packages may not!
+states_map <- usmap::us_map()
+```
+
+## Introduction
+
+Before we get into prediction, it will be helpful to get some background on the history of electionis in the United States. Let's start with a relatively simple question: how do election results change year to year? There are several ways to measure the results of an election:
+
+1. Popular vote share - this is what most people think of as the "popular vote." 
+2. Two party popular vote share - this exculdes third party candidates, which have not had a major impact on presidential election outcomes since before World War II. However, at a state level, third parties can have a signficant impact, as there have been relatively recent instances of third party candidates winning small numbers of states and electoral votes.
+3. Electoral votes - awarded on a state by state basis, this is what candidates have to win to win the presidency. I'll take a closer look at what states seem matter (by one definition of "matter") later in this entry. 
+
+## Popular Vote Share
+Because the presidential election is determined on a state by state basis, it's good to start looking at some maps. For now, I'll stick to the two party vote share, becuase intuitively that's what matters for election outcomes; because of the weakness of third party campaigns since WWII, whoever wins between the Republican and Democrat almost always wins the state and therefore the electoral votes.  
+
+```{r margins, echo=FALSE, warning = FALSE, results = FALSE}
+pv_margins_map <- pvstate_df %>%
+  filter(year >= 1972) %>%
+  mutate(win_margin = (R_pv2p-D_pv2p))
+
+# Find max vote shares to set bounds
+pv_margins_map[which.max(pv_margins_map$win_margin),]
+pv_margins_map[which.min(pv_margins_map$win_margin),]
+
+plot_usmap(data = pv_margins_map, regions = "states", values = "win_margin") +
+  facet_wrap(facets = year ~.) + ## specify a grid by year
+  scale_fill_gradient2(
+    high = "red", 
+    mid = "white",
+    low = "blue", 
+    breaks = c(-75,-50,-25,0,25,50,75), 
+    limits = c(-75,75),
+    name = "Win Margin (Percentage Points)"
+  ) +
+  theme_void() +
+  theme(strip.text = element_text(size = 12),
+        aspect.ratio=1) + 
+  labs(title = "Vote Margins By State and Year For US Presidential Elections",
+              caption = "Positive margins are wins for Republicans, negative for Democrats.") +
+    theme(plot.title = element_text(face="bold"))
+
+```
+
+Looking at the voting margins in general can be deceptive: because states are mostly winner-take-all, a narrow win counts the same as a blowout in terms of results. For example, in 1972, **Richard Nixon** beat **George McGovern** by `59.9` percentage points in Mississippi, meaning that if **185k people** switched their votes from Nixon to McGovern, Nixon *still* would have won Mississippi and it's electoral votes. With that in mind, ignoring the gradient and focusing solely on winners and losers may paint a better picture of electoral trends over time.
+
+```{r winner, echo=FALSE, warning = FALSE, results = FALSE}
+pv_map_grid <- pvstate_df %>%
+  filter(year >= 1972) %>%
+  mutate(winner = ifelse(R > D, "Republican", "Democrat"))
+
+plot_usmap(data = pv_map_grid, regions = "states", values = "winner", color = "white") +
+  facet_wrap(facets = year ~.) + ## specify a grid by year
+  scale_fill_manual(values = c("blue", "red"), name = "Popular Vote Winner") +
+  theme_void() +
+  theme(strip.text = element_text(size = 12),
+        aspect.ratio=1) +
+  labs(title =  "Popular Vote Winners by State and Year") +
+    theme(plot.title = element_text(face="bold"))
+```
+
+There are a lot of different conclusions that can be drawn from the winner take all graphic, many of which I'm excited to explore as the class continues.For example, certain states have remained remarkably consistent in which party they vote for: Texas has not voted for a Democrat since 1976, and Minnesota has not voted for a Republican since 1972. Exploring this stability is something I will try to focus on throughout the blog. 
+
+A key part of the trend that I am interested in is the geographic components of this polarizaiton: since 1992, the west coast and northeast have reliably voted for Democrats, while much of the center of the country has voted for Republicans. Understanding what drives this trend is crucial to predicitng future elections, as it may give important information about how large swathes of the country will vote. 
+
+
+## Tipping Point States
+The combination of the electoral college and looking at the vote share over time begs a question: which states matter to decide elections? To do this, I'll use the idea of a tipping point state. 
+
+A **tipping point state** is a state that puts a candidate over the threshold to win the electoral college. We calculate this threshold value by taking the total number of electoral votes, dividing by 2 and then adding 1. 
+
+Then, to figure out the tipping point state, we order the states by net vote share. For example, in 2016, Donald Trump won `72.1` of the vote in West Virginia, so that would be the first state on his list. The rest of the states are ordered by the margin they voted for or against Trump, keeping track of the electoral college votes for each state. From there, the state that puts the winner (in this example, Trump) over the threshold is the so called tipping point state. 
+
+All of this disucssion leads to a natural question: what are the most common tipping point states? We can produce a list of the tipping point state in every election going back to WWII. I matched the electoral college values that I got from [archive.gov](https://www.archives.gov/electoral-college/results
+) and [Wikipedia](https://en.wikipedia.org/wiki/United_States_Electoral_College) for each state with the two party vote shares from Lab 1. There are some distinct drawbacks to using two party vote share, instead of raw vote share:
+
+1. In 1948 and 1964, Alabama refused to put Harry Truman and Lyndon B. Johnson, respectively, on the ballot. The electoral votes were not pledged, so I set the Alabama electoral college votes for those years to zero. 
+
+2. Some third party candidates have won small numbers of electoral votes, which will not be accounted for with the two party vote share. Strom Thurmond in 1948, and George Wallace in 1968 were the only third party candidates to pick up electoral votes. Becuase I am using the two party vote share, I set the electoral college values of the states they won to zero as well. 
+
+3. The two party vote share margins may not be the same as the raw vote share margins, leading to discrepencies in actual calculations. 
+
+Two unrelated issues to consider are the ideas of faithless electors and states splitting their electoral votes: for simplicity, I ignored both of these factors in the calculations as they tend to have minimal effects. None the less, I continue forward and calculate the tipping point states for each election since WWII.
+
+```{r tipping, echo=FALSE,  warning = FALSE, results = 'asis'}
+#read in electoral college data,  clean
+ec_values <- read.csv("../Data/ElectoralCollegePost1948_adj.csv")
+ec_values <- ec_values[colSums(!is.na(ec_values)) > 0]
+ec_values <- na.omit(ec_values)
+names(ec_values)[names(ec_values) == "State"] <- "state"
+names(ec_values)[names(ec_values) == "Year"] <- "year"
+
+# clean popular vote by state data
+pvstate_df[is.na(pvstate_df)] <- 0
+pvstate_df <- pvstate_df %>%
+  mutate(winner = ifelse(R > D, "republican", "democrat")) %>%
+  mutate(win_margin = (R_pv2p-D_pv2p))
+
+# A few rows are lost from 2020 entries and 
+# entries from states that didn't exist at the time of the election
+tipping_df <- pvstate_df %>% left_join(ec_values, by=c("state","year"))
+
+#tipping state calculation set ups
+year_list <- seq(from= 1948, to=2016, by=4)
+state_list <- seq(from=1, to=length(year_list), by=1)
+margin_list <- seq(from=1, to=length(year_list), by=1)
+ec_margin_list <- seq(from=1, to=length(year_list), by=1)
+party_list <- seq(from=1, to=length(year_list), by=1)
+threshold_list <- aggregate(tipping_df$EC, by=list(Category=tipping_df$year), FUN=sum) /2 +1
+
+#main loop
+for(i in seq(from=1, to=length(year_list),by=1)){
+  
+  #set year and threshold
+  temp_year <- year_list[i]
+  threshold <- threshold_list[i,2]
+  
+  #subset and add column for cumulative EC votes for dems
+  dem_wins <- tipping_df %>% filter(winner == 'democrat') %>% filter(year == temp_year)
+  dem_wins <- arrange(dem_wins, win_margin)
+  dem_wins <- dem_wins %>% mutate(cumsum = cumsum(EC))
+  
+  #subset and add column for cumulative EC votes for dems
+  rep_wins <- tipping_df %>% filter(winner == 'republican') %>% filter(year == temp_year)
+  rep_wins <- arrange(rep_wins, -win_margin)
+  rep_wins <- rep_wins %>% mutate(cumsum = cumsum(EC))
+  
+  ec_margin_list[i] = abs(dem_wins[nrow(dem_wins),ncol(dem_wins)]-rep_wins[nrow(rep_wins),ncol(rep_wins)])
+  
+  #pick the subset of the winning party
+  if (dem_wins[nrow(dem_wins),ncol(dem_wins)]>rep_wins[nrow(rep_wins),ncol(rep_wins)]){
+    past_tip <- dem_wins %>% filter(cumsum >= threshold)
+    party_list[i]="D"
+  } else {
+    past_tip <- rep_wins %>% filter(cumsum >= threshold)
+    party_list[i]="R"
+  }
+  
+  #find tipping point an add to list
+  out_tip <- past_tip[1,]
+  state_list[i] <- out_tip$state
+  margin_list[i] <-out_tip$win_margin
+}
+
+win_list = seq(from=1, to=length(year_list), by=1)
+ec_win_list = seq(from=1, to=length(year_list), by=1)
+
+for(i in seq(from=1, to=length(year_list), by=1)){
+  win_list[i] = paste(party_list[i], toString(abs(round(margin_list[i], digits=3))), sep = "+")
+  ec_win_list[i] = paste(party_list[i], toString(ec_margin_list[i]), sep="+")
+}
+
+display <- as.data.frame(cbind(year_list, state_list, win_list,  ec_win_list))
+names(display)[names(display) == "state_list"] <- "Tipping Point State"
+names(display)[names(display) == "year_list"] <- "Election"
+names(display)[names(display) == "win_list"] <- "Vote Share Margin in Tipping State"
+names(display)[names(display) == "ec_win_list"] <- "Electoral College Margin"
+
+library(knitr)
+kable(display)
+
+
+```
+
+
+This table shows us the tipping point state in each election, and the margin of victory in that state. There are a few key  points from this table:
+
+1. Which states matter in terms of the overall outcomes of elections. These states roughly line up with the popular idea of which states are "swing states." In 2020, Michigan, Ohio, and Pennsylvania are all like to be important. According to [FiveThirtyEight](https://projects.fivethirtyeight.com/swing-states-2020-election/) all three have swung during the past two elections, and Pennsylvania is [projected](https://projects.fivethirtyeight.com/2020-election-forecast/) to be the tipping point state.
+
+2. Which elections were competitive, in one sense. We can see that 2000 and 2016 had razor thin margins in Florida and Pennsylvania, respecitively, demonstrating the extraordinarily competitive elections. On the opposite end of the spectrum, Lyndon B. Johnson trounced Barry Goldwater in 1964, as clearly indicated by Johson winning the tipping point state by nearly 25 percentage points.
+
+3. Close results in the tipping point state do not neccesarily imply close results in the overall electoral college margin. This is because results from the tipping point state do not *have* to be correlated with national results. It may be that a state like Pennsylvania votes similarly to Ohio, but not to Florida or New York which carry large numbers of electoral votes. 
+
+We can take a closer look at the `2016` election:
+
+```{r 2016, echo=FALSE,  warning = FALSE, results = 'asis', message = FALSE}
+  library(data.table)
+  rep_wins <- tipping_df %>% filter(winner == 'republican') %>% filter(year == temp_year)
+  rep_wins <- arrange(rep_wins, -win_margin)
+  rep_wins <- rep_wins %>% mutate(cumsum = cumsum(EC))
+  rep_wins <- rep_wins %>% filter(cumsum >= 230)
+  rep_wins <- subset(rep_wins, select=c("state","win_margin","EC","cumsum"))
+  rep_wins$win_margin <- round(rep_wins$win_margin, digits =3)
+  setnames(rep_wins, old=c("state","win_margin","EC","cumsum"), new=c("State","Trump Victory Margin","Electoral College Votes","Cumulative Electoral College Votes"))
+  
+  kable(rep_wins, caption = "States that Donald Trump narrowly won in 2016.")
+
+```
+
+Donald Trump was able to win a number of states by a small margin, with a razor thin win in Pennsylvania to seal the electoral college victory. Despite losing the popular vote, Trump was able to win just enough states on small margins to win the overall victory, meaning that he had an electoral college advantage. 
+
+When we turn to forecasting and prediction for the rest of this class, having this information as a background will be useful. Close predicted margins in the projected tipping point state likley means a high degree of uncertainty. In addition, this demonstrates the heterogeneity of voting in different states, suggesting that an effective forecasting model will work on a state by state basis. Keeping track of different paths to victory for the candidates will be crucial to accurately predicting the overall outcome.
+
+
+
+
+
+
+
