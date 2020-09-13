@@ -49,7 +49,9 @@ winner take all graphic, many of which I’m excited to explore as the
 class continues. For example, certain states have remained remarkably
 consistent in which party they vote for: Texas has not voted for a
 Democrat since 1976, and Minnesota has not voted for a Republican since
-1972. This phenomenon may be the result of many possible outcomes:
+1972. 
+
+This phenomenon may be the result of many possible outcomes:
 political polarization, relatively low migration combinded with
 demographic preferences, economic trends (based on industry), and many
 other possibilities. It is difficult to determine which (if any) of
