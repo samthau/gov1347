@@ -1,4 +1,4 @@
-_An example blog for Gov 1347_
+_Welcome to the prediction blog_
 
 Welcome to my election analysis blog! It will be updated *every Sunday.* Feel free to reach out to me ([sunyoungpark@g.harvard.edu](sunyoungpark@g.harvard.edu)) if you have any comments or questions.
 
