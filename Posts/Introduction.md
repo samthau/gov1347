@@ -1,7 +1,7 @@
-Introduction: Welcome to the Blog
+Introduction: Election Outcomes and Tipping Points
 ================
 Samuel Thau
-9/9/2020
+9/12/2020
 
 ## Introduction
 
