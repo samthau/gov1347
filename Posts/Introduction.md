@@ -50,8 +50,8 @@ There are a lot of different conclusions that can be drawn from the
 winner take all graphic, many of which I’m excited to explore as the
 class continues.For example, certain states have remained remarkably
 consistent in which party they vote for: Texas has not voted for a
-Democrat since 1976, and Minnesota has not voted for a Republican since
-1972. Exploring this stability is something I will try to focus on
+Democrat since `1976`, and Minnesota has not voted for a Republican since
+`1972`. Exploring this stability is something I will try to focus on
 throughout the blog.
 
 A key part of the trend that I am interested in is the geographic
