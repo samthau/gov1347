@@ -188,5 +188,5 @@ of uncertainty. In addition, this demonstrates the heterogeneity of
 voting in different states, suggesting that an effective forecasting
 model will work on a state by state basis. Keeping track of different
 paths to victory for the candidates will be crucial to accurately
-predicting the overall outcome, because that is what will determine the
+predicting the overall outcome, because that will determine the
 victor.
