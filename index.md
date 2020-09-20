@@ -4,7 +4,7 @@ This blog is a log of the assignments for the Harvard College class Government 1
 An introduction to the blog. Covers different ways to think about election results. Includes a discussion of "tipping point states."
 
 # [2. Economy](Posts/Economy_post.html)
-Models using the economy to predict election outcomes. 
+Models using the economy to predict election outcomes. National and state by state regressions of various forms.
 
 
 
