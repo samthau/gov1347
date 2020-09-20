@@ -14,7 +14,7 @@ outside of the control of any one person or campaign. For example, some
 believe that the economy was the deciding factor in the 2012 election,
 given then President Barack Obama the edge over Mitt Romney, with the
 economy growing just enough to overcome the typical anit-incumbent
-sentiment in United State elections\[1\].
+sentiment in United State elections[^1].
 
 In doing so, a number of assumptions are made about voters. There are
 three main factors to consider when attempting to model voter choice as
@@ -39,9 +39,9 @@ model. Let’s begin with the issue of time frame. It is a well documented
 fact that people have short memories when it comes to abstract ideas
 like the economy, and that remains true when looking at voting outcomes.
 Not only are people much more responsive to the election year
-economy\[2\], placing nearly 75% of the weight on the election year
+economy[^2], placing nearly 75% of the weight on the election year
 economy, they place the majority of their weight on the final two
-quarters before the election\[3\]. Because of this, I will use data from
+quarters before the election[^3]. Because of this, I will use data from
 the second quarter of 2020 (as third quarter data does not yet exist).
 
 To deal with the problem of figuring out which variables to choose,
@@ -125,7 +125,7 @@ As discussed in last week’s post, the states are what really matters for
 winning elections. We can move to a state by state model, first
 estimating the results for each state indepedently. To do so, we draw on
 personal income data from the first and second quarters of each election
-year dating back to 1960\[4\]. Unfortunately, the state by state data
+year dating back to 1960[^4]. Unfortunately, the state by state data
 for quarter 2 will not be released until later this week, so for the
 time being I used the national personal income growth for quarter 2 in
 every state. We run 50 indepdent regressions, one for each state and
@@ -159,7 +159,7 @@ time.
 
 Instead of running 50 seperate regressions, we can instead run a single,
 much larger regression but with dummy variables for the states. This
-controls for particular states behaving similarly across time\[5\].
+controls for particular states behaving similarly across time[^5].
 
 <style type="text/css">
 .scroll-100 {
