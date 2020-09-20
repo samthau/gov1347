@@ -1,0 +1,262 @@
+---
+title: "The Role of the Economy in Elections"
+author: "Samuel Thau"
+date: "9/19/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+
+# import libraries
+library(tidyverse)
+library(ggplot2)
+library(usmap)
+library(plm)
+library(data.table)
+library(knitr)
+library(pander)
+library(broom)
+library(tibble)
+library(dplyr)
+library(tidyr)
+library(purrr)
+
+
+## read in state pop vote
+pvstate_df <- read_csv("../Data/popvote_bystate_1948-2016.csv")
+pv_nat <- read_csv("../Data/popvote_1948-2016.csv")
+
+## shapefile of states from `usmap` library
+## note: `usmap` merges this internally, but other packages may not!
+states_map <- usmap::us_map()
+unique(states_map$abbr)
+
+## read in  economic data
+us_econ <- read_csv("../Data/econ.csv")
+state_econ <- read_csv("../Data/state_econ.csv")
+
+##set election cycles
+years <- seq(from=1960, to=2016, by=4)
+
+
+```
+
+## Introduction
+Many election forecasting models rely at least in part on so called "fundamentals," that are outside of the candidates control. The classic example of a "fundamental" is the economy. The incumbent challengers (and theoretically, a candidate from the incumbent party) could have some influence on the economy, but in general it is well outside of the control of any one person or campaign. For example, some believe that the economy was the deciding factor in the 2012 election, given then President Barack Obama the edge over Mitt Romney, with the economy growing just enough to overcome the typical anit-incumbent sentiment in United State elections[^1]. 
+
+In doing so, a number of assumptions are made about voters. There are three main factors to consider when attempting to model voter choice as a function of the economy:
+
+1) How direct is the relationship between voting and the economy?
+2) Do voters have complete information?
+3) Do voters have a sociotropic or individual focus?
+
+Questions 2 and 3 have been studied empirically, and will inform the model that I build during this post. The answer to question 1 is more philosophical: does seeing higher GDP numbers make voters more inclined to vote one way or another? Or is it more indirect, where a higher GDP leads to more money in people's pockets, making them happier which makes them more inclined to vote for the status quo? Figuring out the answer is tricky. 
+
+## Choosing Model Inputs
+To model voter behavior, we must first think about the inputs into a model. Let's begin with the issue of time frame. It is a well documented fact that people have short memories when it comes to abstract ideas like the economy, and that remains true when looking at voting outcomes. Not only are people much more responsive to the election year economy[^2], placing nearly 75% of the weight on the election year economy, they place the majority of their weight on the final two quarters before the election[^3]. Because of this, I will use data from the second quarter of 2020 (as third quarter data does not yet exist). 
+
+To deal with the problem of figuring out which variables to choose, consider both questions 1 and 3 from the introduction. I believe that it is a reasonable assumption that people care about their own income, but also are influenced by the national economy (either indirectly through the job market, or just through the news). Because of this, I will use two economic indicators: national level GDP growth in quarters 1 and 2 of the election year, and personal income growth in quarters 1 and 2. In both cases, the data I use is compared to the previous quarter and controls for the time of year. I will vary the scope (e.g. national vs state) of the personal income data, depending on the exact model. 
+
+Varying the scope of personal income is intentional: I believe it is a reasonable assumption to make that for more direct economic indicators, people may be influenced a more local level. After examining the results, we will return to if this is actually a reasonable assumption to make. 
+
+## A National Model
+We can begin with a national level model, looking at data over time. We can regress national personal income growth in the first and second quarters, along with national GDP growth on the incumbents two party vote share in each election year[^4].
+
+```{r national, echo=FALSE,  warning = FALSE, message = FALSE}
+## build data frame for national level regression
+nat_econ_df <- na.omit(us_econ[c("year","quarter","GDP_growth_qt","RDI_growth","unemployment")])
+nat_econ_df <- nat_econ_df %>% filter(year %in% years, quarter<3)
+setDT(nat_econ_df)   # coerce to data.table
+nat_econ_df <- dcast(nat_econ_df, year ~ quarter, value.var = c("GDP_growth_qt", "RDI_growth", "unemployment"))
+
+pv_nat_col <- pv_nat %>% filter(incumbent_party == TRUE, year>=1960) %>% select(year, winner, pv2p)
+nat_econ_df$vote_margin <- pv_nat_col$pv2p
+nat_econ_df$RDI_growth_1 <- 100*nat_econ_df$RDI_growth_1
+nat_econ_df$RDI_growth_2 <- 100*nat_econ_df$RDI_growth_2
+
+nat.linreg <- lm(vote_margin~1+GDP_growth_qt_1+GDP_growth_qt_2+RDI_growth_1+RDI_growth_2, nat_econ_df) 
+pred_df <- transpose(as.data.frame(c(0.00635502610617094, 0.0972422967358656,0.31926,-9.54111)))
+colnames(pred_df) <- c("RDI_growth_1","RDI_growth_2","GDP_growth_qt_1","GDP_growth_qt_2")
+
+pred_out <- predict(nat.linreg, pred_df)
+summary(nat.linreg)
+
+```
+
+This model does an all together mediocre job of prediction. 
+
+* It has an R^2 value of `0.50`, which means that the model explains almost exactly half of the variance in the dataset. 
+
+* There is a negative coefficient on the first quarter personal income of `-1.675`, while there is a positive coefficient on the second quarter personal income of `1.416`. This would suggest that voters really have a "what have you done for me lately" attitude. This means that for an increase of one percent personal income growth in the first quarter, holding all else constant, the vote share for the incumbent party is expected to decrease. 
+
+* In general, the standard errors for the coefficients are quite high, relative to the magnitude of the coefficients, suggesting that these results cannot be taken particuarly seriously. However, this may just be a problem with sample size. 
+
+All together, this model seems like it could be useful, but we must first map it onto the state level. Something to check is if the predicted outcomes makes sense. This model predicts that Trump will win `28.69` percent, an exceedingly low fraction of the popular vote. This is likely tied to the severe decline in GDP in the second quarter due to COVID.
+
+## A State Level Model
+As discussed in last week's post, the states are what really matters for winning elections. 
+We can move to a state by state model, first estimating the results for each state indepedently. To do so, we draw on personal income data from the first and second quarters of each election year dating back to 1960[^5]. Unfortunately, the state by state data for quarter 2 will not be released until later this week, so for the time being I used the national personal income growth for quarter 2 in every state. We run 50 indepdent regressions, one for each state and estimate the results of this year's election by doing so. 
+
+```{r state1,echo=FALSE,  warning = FALSE, message = FALSE }
+ ##state by state regressions
+#reshape state RDI growth
+state_econ_df <- state_econ[,1:3]
+colnames(state_econ_df) <- c("state","Q1","Q2")
+
+for(i in seq(from=4, to=64, by=4)){
+  start <- i
+  stop <- 1+i
+  temp <- state_econ[,c(1,start:stop)]
+  colnames(temp) <-  c("state","Q1","Q2")
+  state_econ_df <- rbind(state_econ_df, temp)
+}
+
+year_col=rep(1952, 51)
+years = seq(from=1952,to=2016, by=4)
+
+us_econ_clean = us_econ %>% filter(year %in% years, quarter<3)
+gdp_1 = us_econ_clean %>% filter(quarter==1)
+gdp_1 = gdp_1$GDP_growth_qt
+gdp_2 = us_econ_clean %>% filter(quarter==2)
+gdp_2 = gdp_2$GDP_growth_qt
+
+gdp_append_1 = rep(gdp_1[1],51)
+gdp_append_2 = rep(gdp_2[1],51)
+
+for(i in seq(from=2, to=length(years),by=1)){
+  new_year = rep(years[i],51)
+  g_1 = rep(gdp_1[i],51)
+  g_2 = rep(gdp_2[i],51)
+  
+  year_col= append(year_col, new_year)
+  gdp_append_1 = append(gdp_append_1,g_1)  
+  gdp_append_2 = append(gdp_append_2,g_2)
+}
+
+state_econ_df$year = year_col
+state_econ_df$gdp_1 = gdp_append_1
+state_econ_df$gdp_2 = gdp_append_2
+
+## create state by state regression dataframe by appending econ data to incumbent vote share
+pv_nat <- read_csv("../Data/popvote_1948-2016.csv")
+incumbent_party <- pv_nat %>% select(party,year, incumbent_party) %>%  filter(incumbent_party==TRUE)
+
+state_reg_df <- state_econ_df
+state_reg_df$vote_share <- NA
+
+
+for (i in seq(from=1, to=nrow(state_reg_df), by=1)){
+    y <- state_reg_df$year[i]
+    inc <- incumbent_party$party[which(incumbent_party$year == y)]
+    
+    if (inc == "republican"){
+        share <- pvstate_df %>% filter(year == y, state== state_reg_df$state[i]) %>% select(R_pv2p)
+    } else {
+        share <- pvstate_df %>% filter(year == y, state== state_reg_df$state[i]) %>% select(D_pv2p)
+    }
+  
+    state_reg_df$vote_share[i] <- as.numeric(share)
+}
+
+state_reg <- na.omit(state_reg_df)
+state_reg <- state_reg %>% filter(year>1959)
+
+## state by state regression
+output <- transpose(as.data.frame(c(NA, NA)))
+colnames(output) <- c("vote_share","state")
+
+econ_2020 <- state_econ[,c(1,70)]
+colnames(econ_2020) <- c("state","Q1")
+econ_2020$Q2 <- rep(6.41,51)
+econ_2020$gdp_1 <- rep(0.31926,51)
+econ_2020$gdp_2 <- rep(-9.54111,51)
+
+for(i in seq(from=1, to=51, by=1)){
+  temp_state <- unique(state_reg$state)[i]
+  temp_df <- state_reg %>% filter(state==temp_state)
+  temp_model <- lm(vote_share~Q1+Q2+gdp_1+gdp_2, temp_df)
+  
+  out_val <- as.data.frame(predict(temp_model, econ_2020[which(econ_2020$state == temp_state),]))
+  out_val$state <-temp_state
+  colnames(out_val) <- c("vote_share","state")
+  output <- rbind(output,out_val)
+}
+
+output <- na.omit(output)
+output <- output %>% mutate(vote_margin = 2*vote_share-100)
+output <- output %>% mutate(winner = if_else(vote_margin>0, "Trump", "Biden"))
+plot_usmap(data = output, regions = "states", values = "winner") +
+  scale_fill_manual(values = c("blue","red"), name = "Predicted State Winner") +
+  theme_void() + labs(title="Predicted state winners based on state level regressions")
+
+```
+
+This election map is somewhat surprsing: again, it would appear that a massive GDP drop off in the second quarter dooms President Trump. This would be one of the worst results in history of the United States. We can look at the vote margins for Trump in a few states:
+
+```{r table, echo=FALSE,  warning = FALSE, results = 'asis', message = FALSE}
+out <- output[1:8,]
+out <- out[,c(2,1,3,4)]
+colnames(out) <- c("State","Trump Vote Share",  "Vote Margin", "Winner")
+
+kable(out)
+```
+
+Based on this model, Trump is not only consistently losing, but consistently getting routed. One potential problem with this model is that each state is independent: it could be that in years where the economy is in bad shape, certain states respond in similar ways across time. 
+
+## Incorporating State Fixed Effects
+Instead of running 50 seperate regressions, we can instead run a single, much larger regression but with dummy variables for the states. This controls for particular states behaving similarly across time[^6]. 
+
+```{css, echo=FALSE}
+.scroll-100 {
+  max-height: 350px;
+  overflow-y: auto;
+  background-color: inherit;
+}
+```
+
+```{r fixed,echo=FALSE,  warning = FALSE, message = FALSE, class.output="scroll-100" }
+fixed_effects <- lm(vote_share ~ Q1+Q2+gdp_1+gdp_2+state, state_reg)
+summary(fixed_effects)
+```
+
+Taking a careful look at this regression reveals some interesting trends.
+
+1) `Q1` and `Q2` are the personal income in the first and second quarters before an election year, and based on the coefficients, they do not seem to matter for the incumbent's vote share nearly as much as GDP or the state fixed effects. 
+
+2) One way to interpret the state fixed effects is as a measure of willingness to vote for an incumbent. With that interpretation in mind, it is not surprising that many of the coefficients are negative, given the well documented bias against incumbents. 
+
+3) Before making predictions or looking at the electoral map, again this would seem to tilt heavily in Biden's favor for the upcoming election, given the severe drop in GDP during the second quarter of this year. 
+
+4) The standard error is huge, at `10.69`, meaning that this entire regression may not be of any real use.
+
+We can use this model to generate an electoral map, along with electoral college results. 
+
+```{r map,echo=FALSE,  warning = FALSE, message = FALSE,class.output="scroll-100" }
+prediction <- as.data.frame(predict(fixed_effects, econ_2020))
+prediction$state <- econ_2020$state
+colnames(prediction) <- c("inc_vote_share", "state")
+prediction$margin <- 2*prediction$inc_vote_share-100
+prediction <- prediction %>% mutate(winner = ifelse(margin>0, "Trump","Biden"))
+colnames(prediction) <- c("Trump Vote Fraction", "State","Vote Margin","Winner")
+prediction <- prediction[,c(2,1,3,4)]
+prediction
+```
+
+Biden wins quite literally every single state, in what would be the most lopsided election in United States history. There are also some particularly odd results: Biden would be expected to win Missouri by more than he would win Rhode Island, whcih is directly contrary to reality. Biden would be expected to win every state by roughly the same margin as in the national prediction; this suggests that particular states do not vote differently based on economic variables. 
+
+Earlier, when I assumed that there would be heterogeneity between states, I was clearly wrong. These results also suggest that trying to use the economy at the state level as a predictor is much more difficult than at the national level - it may be that other factors like demographics, voting restrictions, social issues, the Supreme Court, and other issues are much more important at the local level. While this is an unsatisfying conclusion to a blog post, it is also a valuable lesson for future predictions and modelling: what works at a national level may not work at a state level.
+
+## What does this mean for the election?
+All three versions of the economics based model I ran give Trump essentially no shot at winning the election, but that does not mean his re-election campaign is completely doomed. Reputable (and much more sophisticated) models like the ones from [FiveThirtyEight](https://projects.fivethirtyeight.com/2020-election-forecast/) and [The Economist](https://projects.economist.com/us-2020-forecast/president) give Trump a serious chance of winning, ranging from 10 to 25 percent. 
+
+What my models say is that Trump is going up against a terrible national enviornmnet, but not that he has no shot. A more sophisticated model (similar to what FiveThirtyEight and The Economist do) would  use the national enviornment as a starting point and then use other factors like polling, accounting for turnout, and shocks to come up with an eventual winner. This could happen in the form of Bayesian updating[^7], using a prior based on the economy, demographics and previous election results, and then using polling and current events to update. Once we begin to incorporate polling, this will become a viable strategy for modelling the election. 
+
+[^1]: Sides, John, et al. The Gamble: Choice and Chance in the 2012 Presidential Election - Updated Edition. Princeton University Press, 2014. Project MUSE muse.jhu.edu/book/64467.
+[^2]: Healy, Andrew, and Lenz, Gabriel S. “Substituting the End for the Whole: Why Voters Respond Primarily to the Election-Year Economy.” American Journal of Political Science, vol. 58, no. 1, 2014, pp. 31–47.
+[^3]: Achen, Christopher H, and Bartels, Larry M. Democracy for Realists. REV - Revised ed., Princeton University Press, 2017.
+[^4]: Data for this regression comes from a number of sources. Real disposable income comes from the Bureau of Economic Analysis (BEA). GDP growth comes from the BEA and the Department of Commerce. 
+[^5]: This data comes from the U.S. Bureau of Economic Analysis, [“Quarterly Personal Income By State.”](https://apps.bea.gov/itable/iTable.cfm?ReqID=70&step=1)
+[^6]: A careful examination of the code reveals that I am not conducting a fixed effects regression in the standard way. To get consistent and unbiased estimates for the coefficients, I would normally subtract the mean value across time for each state. However, with this dataset, doing so leads to problems with collinearity (as GDP and personal income are correlated) when trying to make predictions. For the sake of having predictions, I decided to just include dummy variables instead. 
+[^7]: More on this later - this is probably the end goal for my overall prediction model. 
