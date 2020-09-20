@@ -322,23 +322,23 @@ college results.
 Biden wins quite literally every single state, in what would be the most
 lopsided election in United States history.
 
-1.  Sides, John, et al. The Gamble: Choice and Chance in the 2012
+[^1]: Sides, John, et al. The Gamble: Choice and Chance in the 2012
     Presidential Election - Updated Edition. Princeton University Press,
     2014. Project MUSE muse.jhu.edu/book/64467.
 
-2.  Healy, Andrew, and Lenz, Gabriel S. “Substituting the End for the
+[^2]:  Healy, Andrew, and Lenz, Gabriel S. “Substituting the End for the
     Whole: Why Voters Respond Primarily to the Election-Year Economy.”
     American Journal of Political Science, vol. 58, no. 1, 2014,
     pp. 31–47.
 
-3.  Achen, Christopher H, and Bartels, Larry M. Democracy for Realists.
+[^3]: Achen, Christopher H, and Bartels, Larry M. Democracy for Realists.
     REV - Revised ed., Princeton University Press, 2017.
 
-4.  This data comes from the U.S. Bureau of Economic Analysis,
+[^4]:  This data comes from the U.S. Bureau of Economic Analysis,
     [“Quarterly Personal Income By
     State.”](https://apps.bea.gov/itable/iTable.cfm?ReqID=70&step=1)
 
-5.  A careful examination of the code reveals that I am not conducting a
+[^5]:  A careful examination of the code reveals that I am not conducting a
     fixed effects regression in the standard way. To get consistent and
     unbiased estimates for the coefficients, I would normally subtract
     the mean value across time for each state. However, with this
