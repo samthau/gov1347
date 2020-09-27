@@ -5,6 +5,10 @@ date: "9/12/2020"
 output:
   rmarkdown::html_document:
     theme: cerulean
+    
+knit: (function(inputFile, encoding) {
+  rmarkdown::render(inputFile, encoding = encoding, output_dir = "../Posts/") })    
+
 ---
 
 ```{r setup, include=FALSE}
