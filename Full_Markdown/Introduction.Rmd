@@ -2,7 +2,9 @@
 title: "Introduction: Electoral Results and Tipping Points"
 author: "Samuel Thau"
 date: "9/12/2020"
-output: github_document
+output:
+  rmarkdown::html_document:
+    theme: cerulean
 ---
 
 ```{r setup, include=FALSE}

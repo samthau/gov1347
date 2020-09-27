@@ -406,7 +406,7 @@ plot_usmap(data = pred_win_ec, regions = "states", values = "polls") +
     theme(plot.title = element_text(face="bold"))
 ```
 
-This electoral map looks much reasonable, and is in line with predictions from experts. Biden wins the electoral college comfortably, with 
+This electoral map looks much reasonable, and is in line with predictions from experts. Biden wins the electoral college comfortably, with `r polls_ec[1,2]` electoral votes while Trump wins `r polls_ec[2,2]`. For Biden, this map looks like a relatively feasible to victory: he wins both Michigan and Pennsylvania, two key historical [tipping point](Introduction.html) states. Biden also wins North Carolina, a state that [FiveThirtyEight projects](https://projects.fivethirtyeight.com/2020-election-forecast/north-carolina/) him to win by `0.06` percentage points, and [The Economist projects](https://projects.economist.com/us-2020-forecast/president/north-carolina) Biden to win by `1.0` percentage points.
 
 ```{r plusmap, echo=FALSE, warning = FALSE, results = FALSE}
 plot_usmap(data = pred_win_ec, regions = "states", values = "plus") +
@@ -416,6 +416,12 @@ plot_usmap(data = pred_win_ec, regions = "states", values = "plus") +
   labs(title =  "Electoral Map Predicted by Polls Plus Model") +
     theme(plot.title = element_text(face="bold"))
 ```
+
+Interestingly enough, the polls plus model projects a Biden landslide. In this model, Biden wins `r plus_ec[1,2]` electoral votes, while Trump only wins `r plus_ec[2,2]`. Biden expands his electoral map, winning Texas, Georgia, Missouri and Arkansas. While Texas and Georgia seem like plausible Biden wins, Missouri and Arkansas do not. In this model, Biden greatly benefits from state fixed effects, along with period effects. As shown in the [appendix](appendix.html), the state fixed effects tend to either be more positive, or less negative for the challengers in many states. However, the biggest shift comes from the dummy variable that marks the election as happening from 2016 onward. 
+
+Because Trump greatly outperformed his polls in 2016, and Clinton underperformed, the model has a strong bias towards challengers. The coefficient for the incumbent is `r round(inc_plus_lm$coefficients[6], digits =3)`, while for the challenger it is `r round(chl_plus_lm$coefficients[6], digits =3)`, representing a nearly three point swing. In 2016, there was good reason for this discrepency between models and the results: Clinton underperformed by about three points due to systemmatic biases in polling, as non-college educted white people were under-represented in polls in comparison to who turned out to vote. The majority of those people voted for Trump, swinging the election. Some have theorized that such an error may repeat itself in 2020, but many disagree on why: some believe that there Trump voters are unlikely to admit they would vote for him, but there is [little evidence](https://fivethirtyeight.com/features/trump-supporters-arent-shy-but-polls-could-still-be-missing-some-of-them/) to back up the claim. 
+
+From a modelling perspective, what this suggests is that I should not include fixed effects by period of time. Instead, it may be that I should look at other controls that are slow to change, like demographics, to get a similar effect without building in a massive bias for predictions in 2020.
 
 
 [^1]: The distinction between incumbent and challenger is made by the party that last held the white house, not by the candidate.

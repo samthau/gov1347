@@ -2,7 +2,9 @@
 title: "The Role of the Economy in Elections"
 author: "Samuel Thau"
 date: "9/19/2020"
-output: html_document
+output:
+  rmarkdown::html_document:
+    theme: cerulean
 ---
 
 ```{r setup, include=FALSE}
@@ -193,20 +195,8 @@ plot_usmap(data = output, regions = "states", values = "winner") +
 
 ```
 
-This election map is somewhat surprsing: again, it would appear that a massive GDP drop off in the second quarter dooms President Trump. This would be one of the worst results in history of the United States. We can look at the vote margins for Trump in a few states:
+This election map is somewhat surprsing: again, it would appear that a massive GDP drop off in the second quarter dooms President Trump. This would be one of the worst results in history of the United States. We can look at the vote margins for Trump:
 
-```{r table, echo=FALSE,  warning = FALSE, results = 'asis', message = FALSE}
-out <- output[1:8,]
-out <- out[,c(2,1,3,4)]
-colnames(out) <- c("State","Trump Vote Share",  "Vote Margin", "Winner")
-
-kable(out)
-```
-
-Based on this model, Trump is not only consistently losing, but consistently getting routed. One potential problem with this model is that each state is independent: it could be that in years where the economy is in bad shape, certain states respond in similar ways across time. 
-
-## Incorporating State Fixed Effects
-Instead of running 50 seperate regressions, we can instead run a single, much larger regression but with dummy variables for the states. This controls for particular states behaving similarly across time[^6]. 
 
 ```{css, echo=FALSE}
 .scroll-100 {
@@ -215,6 +205,20 @@ Instead of running 50 seperate regressions, we can instead run a single, much la
   background-color: inherit;
 }
 ```
+
+```{r table, echo=FALSE,  warning = FALSE, message = FALSE,class.output="scroll-100"}
+out <- output
+out <- out[,c(2,1,3,4)]
+colnames(out) <- c("State","Trump Vote Share",  "Vote Margin", "Winner")
+
+out
+```
+
+Based on this model, Trump is not only consistently losing, but consistently getting routed. This includes several states with negative vote shares, and the District of Columbia with a nonsensical `203.79` vote share. One potential problem with this model is that each state is independent: it could be that in years where the economy is in bad shape, certain states respond in similar ways across time which could  reduce some of the more drastic effects.
+
+## Incorporating State Fixed Effects
+Instead of running 50 seperate regressions, we can instead run a single, much larger regression but with dummy variables for the states. This controls for particular states behaving similarly across time[^6]. 
+
 
 ```{r fixed,echo=FALSE,  warning = FALSE, message = FALSE, class.output="scroll-100" }
 fixed_effects <- lm(vote_share ~ Q1+Q2+gdp_1+gdp_2+state, state_reg)
