@@ -1,0 +1,436 @@
+---
+title: "Incorporating Polls"
+author: "Samuel Thau"
+date: "9/26/2020"
+output:
+  rmarkdown::html_document:
+    theme: cerulean
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# import libraries
+library(tidyverse)
+library(ggplot2)
+library(usmap)
+library(janitor)
+library(usmap)
+
+# read in all data
+nat_popvote_df <- read_csv("../Data/popvote_1948-2016.csv")
+nat_poll_df    <- read_csv("../Data/pollavg_1968-2016.csv")
+
+state_popvote_df <- read_csv("../Data/popvote_bystate_1948-2016.csv")
+state_poll_df <- read_csv("../Data/pollavg_bystate_1968-2016.csv")
+
+nat_econ <- read_csv("../Data/econ.csv")
+state_rdi <- read_csv("../Data/state_rdi.csv")
+
+#build state df with econ, polls, and 
+weeks <- 5
+poll_df <- state_poll_df %>% filter(weeks_left >= weeks, weeks_left<25) %>% 
+  select(year, state, party, candidate_name, avg_poll) %>% 
+  group_by(year, state, candidate_name, party) %>%
+  summarize(avg_poll = mean(avg_poll))
+
+#build economic df at state level from rdi and national gdp
+econ_df <- state_rdi[,1:2]
+colnames(econ_df) <- c("state","rdi_q2")
+econ_df$rdi_q2 <- as.numeric(econ_df$rdi_q2)
+
+for(i in seq(from = 18, to = 290, by = 16)){
+  temp <- state_rdi[,c(1,i)]
+  colnames(temp) <- c("state","rdi_q2")
+  temp$rdi_q2 <- as.numeric(temp$rdi_q2)
+  econ_df <- rbind(econ_df, temp)
+}
+
+#add years and national gdp growth
+year_list <- seq(from = 1948, to = 2020, by=4)
+year_append <- rep(year_list[1],51)
+nat_econ_sub <- nat_econ %>% filter(year %in% year_list, quarter == 2) %>% 
+  select(year, GDP_growth_qt)
+gdp_append <- as.numeric(rep(nat_econ_sub[1,2],51))
+
+for(i in seq(from = 2, to=length(year_list), by =1)){
+  new_year = rep(year_list[i], 51)
+  new_gdp = as.numeric(rep(nat_econ_sub[i,2], 51))
+  year_append = append(year_append, new_year)
+  gdp_append = append(gdp_append, new_gdp)
+}
+
+#append year and national gdp to the econ df
+econ_df$year <- year_append
+econ_df$gdp <- gdp_append
+
+
+## Merge datasets and clean
+inc_data <- nat_popvote_df %>% select("year","party","winner", "incumbent","incumbent_party")
+
+reg_df <- poll_df %>% left_join(econ_df, by=c("state"="state","year"="year")) %>% 
+  left_join(state_popvote_df, by= c("state"="state", "year"="year")) %>%
+  left_join(inc_data, 
+            by  = c("year"="year","party" = "party" ))
+  
+reg_df$period <- ifelse(reg_df$year %in% 1972:1984, "1972-1984",
+                               ifelse(reg_df$year %in% 1988:1996, "1992-2000",
+                                      ifelse(reg_df$year %in% 2000:2012, "2000-2012", 
+                                             "2016-2020")))
+
+reg_df <- reg_df %>% mutate("d_pv"=100*D/total) %>% mutate("r_pv"=100*R/total)
+reg_df <- reg_df %>% 
+  mutate(inc_party = case_when((party=="democrat" & incumbent_party==TRUE) ~ "democrat", 
+                                 (party=="democrat" & incumbent_party==FALSE) ~ "republican",
+                                 (party=="republican" & incumbent_party==TRUE) ~ "republican",
+                                 (party=="republican" & incumbent_party==FALSE) ~ "democrat")) %>%
+  mutate(chl_party = case_when((party=="democrat" & incumbent_party==FALSE) ~ "democrat", 
+                               (party=="democrat" & incumbent_party==TRUE) ~ "republican",
+                               (party=="republican" & incumbent_party==FALSE) ~ "republican",
+                               (party=="republican" & incumbent_party==TRUE) ~ "democrat"))
+
+reg_df <- reg_df %>% 
+  mutate(inc_pv = case_when((inc_party=="republican") ~ r_pv, 
+                              (inc_party=="democrat") ~ d_pv)) %>% 
+  mutate(chl_pv = case_when(chl_party == "democrat" ~ d_pv, 
+                            chl_party == "republican" ~ r_pv))
+
+reg_df <- na.omit(reg_df)
+
+##fundamentals model
+inc_fund_lm <- lm(inc_pv ~ rdi_q2 + gdp + period + state, data = reg_df %>% filter(year < 2020, incumbent_party == TRUE))
+#summary(inc_fund_lm)
+
+chl_fund_lm <- lm(chl_pv ~ rdi_q2 + gdp + period + state, data = reg_df %>% filter(year < 2020, incumbent_party == FALSE))
+#summary(chl_fund_lm)
+
+## polls only model
+inc_polls_lm <- lm(inc_pv ~ avg_poll, data = reg_df %>% filter(year < 2020, incumbent_party == TRUE))
+chl_polls_lm <- lm(chl_pv ~ avg_poll, data = reg_df %>% filter(year < 2020, incumbent_party == FALSE))
+
+## polls and fundamentals model
+inc_plus_lm <- lm(inc_pv ~ rdi_q2 + gdp + period + state + avg_poll, data = reg_df %>% filter(year < 2020, incumbent_party == TRUE))
+#summary(inc_plus_lm)
+
+chl_plus_lm <- lm(chl_pv ~ rdi_q2 + gdp + period + state + avg_poll, data = reg_df %>% filter(year < 2020, incumbent_party == FALSE))
+#summary(chl_plus_lm)
+
+
+
+
+## out of sample fit and comparisons
+# load in and join electoral college values
+elec_col <- read_csv("../Data/ElectoralCollegePost1948_adj.csv") %>% filter(Year> 1968)
+elec_col <- elec_col[,1:3]
+reg_df <- reg_df %>% left_join(elec_col, by = c("year" = "Year", "state" = "State"))
+
+# run out of sample fit to see how often states are called correctly
+year_list <- seq(from = 1972, to = 2016, by = 4)
+state_list <- unique(reg_df$state)
+
+check_out <- function(year, state){
+  #true vote shares
+  true_inc <- reg_df$inc_pv[reg_df$year == year & reg_df$state == state & reg_df$incumbent_party == TRUE]
+  true_chl <- reg_df$chl_pv[reg_df$year == year & reg_df$state == state & reg_df$incumbent_party  == FALSE]
+  
+  if (length(true_inc)>0){
+    
+    #dataframes excluding the row (incumbency is backwards as everything is negated)
+    inc_df <- reg_df %>% filter(!(incumbent_party == FALSE & year == year & state == state))
+    chl_df <- reg_df %>% filter(!(incumbent_party == TRUE & year == year & state == state))
+  
+    #prediction dataframes
+    inc_p <- reg_df[reg_df$year == year & reg_df$state == state & reg_df$incumbent_party == TRUE,]
+    chl_p <- reg_df[reg_df$year == year & reg_df$state == state & reg_df$incumbent_party == FALSE,]
+    
+    #fundamental model out-of-sample prediction
+    mod_econ_inc_ <- lm(inc_pv ~ rdi_q2 + gdp + period + state, data = inc_df )
+    mod_econ_chl_ <- lm(chl_pv ~ rdi_q2 + gdp + period + state, data = chl_df )
+    pred_econ_inc <- predict(mod_econ_inc_, inc_p)
+    pred_econ_chl <- predict(mod_econ_chl_, chl_p)
+  
+    ##poll model out-of-sample prediction
+    mod_poll_inc_ <- lm(inc_pv ~ avg_poll, data = inc_df)
+    mod_poll_chl_ <- lm(chl_pv ~ avg_poll, data = chl_df)
+    pred_poll_inc <- predict(mod_poll_inc_, inc_p)
+    pred_poll_chl <- predict(mod_poll_chl_, chl_p)
+    
+    ##plus model out-of-sample prediction
+    mod_plus_inc_ <- lm(inc_pv ~ avg_poll + rdi_q2 + gdp + period + state, data = inc_df)
+    mod_plus_chl_ <- lm(chl_pv ~ avg_poll + rdi_q2 + gdp + period + state, data = chl_df)
+    pred_plus_inc <- predict(mod_plus_inc_, inc_p)
+    pred_plus_chl <- predict(mod_plus_chl_, chl_p)
+    
+    c(year, state,
+                     econ_margin_error = (pred_econ_inc-pred_econ_chl) - (true_inc-true_chl),
+                     poll_margin_error = (pred_poll_inc-pred_poll_chl) - (true_inc-true_chl),
+                     plus_margin_error = (pred_plus_inc-pred_plus_chl) - (true_inc-true_chl),
+                     econ_winner_correct = (pred_econ_inc > pred_econ_chl) == (true_inc > true_chl),
+                     poll_winner_correct = (pred_poll_inc > pred_poll_chl) == (true_inc > true_chl),
+                     plus_winner_correct = (pred_plus_inc > pred_plus_chl) == (true_inc > true_chl)
+    )
+  }else{
+    c(NA, NA, NA, NA, NA, NA, NA, NA)
+  }
+}
+
+outsamp_dflist <- sapply(year_list, function(year){sapply(state_list, function(state) check_out(year,state))})
+
+outsamp_df <- cbind("year", "state","fund_margin_error",
+                "polls_margin_error","plus_margin_error","fund_correct","polls_correct","plus_correct")
+
+for(j in seq(from = 1, to = 12, by =1)){
+  for(i in seq(from = 1, to = 402, by = 8)){
+    start <- i
+    stop <- i+7
+    temp <- outsamp_dflist[start:stop, j]
+    outsamp_df <- rbind(outsamp_df, temp)
+  }
+}
+
+outsamp_df <- as.data.frame(outsamp_df)
+rownames(outsamp_df) <- NULL
+outsamp_df <- outsamp_df %>% row_to_names(row_number=1)
+outsamp_df_clean <- na.omit(outsamp_df)
+
+outsamp_df_clean$fund_margin_error <- as.numeric(as.character(outsamp_df_clean$fund_margin_error))
+outsamp_df_clean$polls_margin_error <- as.numeric(as.character(outsamp_df_clean$polls_margin_error))
+outsamp_df_clean$plus_margin_error <- as.numeric(as.character(outsamp_df_clean$plus_margin_error))
+
+out_mse <- colMeans(abs(outsamp_df_clean[,3:5]))
+
+fund_corr <- length(outsamp_df_clean$fund_correct[outsamp_df_clean$fund_correct== TRUE])/length(outsamp_df_clean$fund_correct)
+polls_corr <- length(outsamp_df_clean$polls_correct[outsamp_df_clean$polls_correct== TRUE])/length(outsamp_df_clean$polls_correct)
+plus_corr <- length(outsamp_df_clean$plus_correct[outsamp_df_clean$plus_correct== TRUE])/length(outsamp_df_clean$plus_correct)
+
+```
+
+## Introductions: Why Polls?
+As discussed in the last blog entry we briefly discussed that a fundamentals model cannot account for everything when predicting an election, especially at the state level. In fact, using fundamentals seems like a rather indirect way of predicting an election given that polling exists; in a sense, polling is attempting to predict an election by asking a representative sample of people what they think about the election. 
+
+Many of the most sophisticated election models use polls as their backbone, like [FiveThirtyEight](https://projects.fivethirtyeight.com/2020-election-forecast/) and [The Economist](https://projects.economist.com/us-2020-forecast/president). In the lab section for the week, we looked at models that use polls at a national level, but as we've discussed before, the United States president is decided by the states and the electoral college. 
+
+## Comparing Three Models
+For the duration of this blog post, I will be working with three seperate but related models. The first is a fundamentals based model, that looks very similar to [models previously discussed](economy_post.html) on this blog. The second is a polls only model, that relies solely on state polling to predict vote shares. The third is what I refer to as the "polls-plus" model, that incorporates both the fundamentals and the polling data. In all three cases, the model is two sided, meaning it indepedently predicts outcomes for the incumbent and challenger[^1]. It also shifts to using raw vote share, rather than two party vote share, as that is how the majority of polls are conducted. Output for each regression can be found in the [technical appendix](appendix.html).
+
+# Fundamentals Model
+To start, we need a basic fundamentals model for comparison. We'll use a variant of the model from [last week](economy_post.html), this time using only on second quarter real disposable income growth at a state level, second quarter national gdp data, while controlling for state and general era[^2]. Data comes from the [“Quarterly Personal Income By State.”](https://apps.bea.gov/itable/iTable.cfm?ReqID=70&step=1) from the Bureau of Economic Analysis.
+
+Similar to last week, the R-squared value of from these regressions is quite low. The incumbent fundamentals model has an R-squared of `r round(summary(inc_fund_lm)$r.squared,  digits = 3)`, while for the challenger it is `r round(summary(chl_fund_lm)$r.squared, digits = 3)`, both relatively close to the low values from pervious fundamentals model on this blog. 
+
+The mean squared error for the incumbents is `r round(mean(abs(inc_fund_lm$residuals)^2), digits =3)`, and for the challenger it is `r round(mean(abs(chl_fund_lm$residuals)^2), digits =3)`, which is consistent with the low R-squared values. For out of sample fit, we find that the average absolute error on the vote margin[^3], across both models is `r round(out_mse[1],digits=3)`. 
+
+
+# Polls Only Model
+For the polls only model, I work with state level polling from 1972 onward. In many cases, polling is relatively sparse; especially earlier on, not every state has polls. In addition, because there are many polls conducted, I used an average of the polling averages as a single input. This average is calculated by taking historical polling averages produced between six months from the election up the current week and taking the mean[^4]. That value is then regressed on the incumbent or challenger vote share. Becuase this model is new, we will take a look at the full function. 
+
+```{css, echo=FALSE}
+.scroll-100 {
+  max-height: 250px;
+  overflow-y: auto;
+  background-color: inherit;
+}
+```
+
+We can first look at the linear regression for the incumbent. 
+
+```{r polls_inc,echo=FALSE,  warning = FALSE, message = FALSE, class.output="scroll-100" }
+summary(inc_polls_lm)
+```
+
+A few key pieces of information jump out. First, the R-squared value of `r round(summary(inc_polls_lm)$r.squared, digits = 3)` is much, much larger than the fundamentals model, suggesting a much better fit. Secondly, the coefficient on `avg_poll` is `0.966`, it suggests a nearly one to one relationship between the average vote share; if the average polling value for an incumbent increased by `1` percentage point, their expected vote share would increase by `0.966` percentage points. Then, we can look at the challenger regression. 
+
+```{r polls_chl,echo=FALSE,  warning = FALSE, message = FALSE, class.output="scroll-100" }
+summary(chl_polls_lm)
+```
+
+The results are relativley similar: the model has an R-squared of `r round(summary(chl_polls_lm)$r.squared, digits = 3)`, and the coefficient on the average poll value is `0.955`. For all the concern about polls being accurate, this model suggests they are in fact quite predictive, even more than 5 weeks from the election[^5]. 
+
+In terms of in sample fit, the mean squared error for the incumbent is `r round(mean(abs(inc_polls_lm$residuals)^2), digits =3)`, and for the challenger it is `r round(mean(abs(chl_polls_lm$residuals)^2), digits =3)`. These results are clearly much better than the fundamentals model in terms of in sample fit. 
+
+To examine out of sample fit, we look at the average absolute error on the vote margin, which is `r round(out_mse[2],digits=3)`. This value is significatly lower than than for the fundamentals model, continuing with the pattern that the polls are much more predictive than fundamentals. 
+
+
+# Polls Plus Model
+For the polls plus model, it takes the fundamentals model and adds the historical polling average as another predictor. Because this model has the most robust set of inputs, one could imagine that it is also the most accurate model. Due to this model's length and relative similarity to previous models, full details can be found in the [technical appendix](appendix.html).
+
+Unsurprisingly, the R-squared for both the incumbent and challenger is higher, at `r round(summary(inc_plus_lm)$r.squared,digits =3)` for the incumbent and `r round(summary(chl_plus_lm)$r.squared,digits =3)` for the challenger[^6]. Interestingly, for the incumbent, both the coefficients on GDP and real disposable income are negative, while the coefficient on polling average is almost exactly `1.00`. This suggests that for incumbents, the relationship between the polling average and actual results in each state is almost exactly one to one. For the challenger, the coefficient on GDP is negative, and the coefficient on vote share is `0.983`, suggesting that a similar relationship holds. 
+
+In terms of in sample fit, we find the the regression for the incumbent has a mean squared error of `r round(mean(abs(inc_plus_lm$residuals)^2), digits =3)`, while it is `r round(mean(abs(chl_plus_lm$residuals)^2), digits =3)` for the challenger. Consistent with having the lowest R-squared, the polls plus model appears to fit the data best in sample. 
+
+To examine out of sample fit, we look at the average absolute error on the vote margin, which is `r round(out_mse[3],digits=3)`. This value is the lowest of the three models, again following the pattern that the polls plus model fits the data best. 
+
+## Predictions and the Electoral College
+After seeing the varrying degree of accuracy of these three models, it is time to move to prediction. We have second quarter GDP and real disposable income, so to predict the 2020 election we just need polling averages. I used polling averages from [FiveThirtyEight](https://projects.fivethirtyeight.com/2020-election-forecast/) as polling data input[^7]. Using this data, we can predict the outcomes of the 2020 election. We can look at the results from each model in turn.
+
+```{r prediction,echo=FALSE,  warning = FALSE, message = FALSE }
+## 2020 predictions
+poll_2020_df <- read_csv("../Data/presidential_poll_averages_2020.csv")
+
+
+elxnday_2020 <- as.Date("11/3/2020", "%m/%d/%Y")
+dnc_2020 <- as.Date("8/20/2020", "%m/%d/%Y")
+rnc_2020 <- as.Date("8/27/2020", "%m/%d/%Y")
+
+colnames(poll_2020_df) <- c("year","state","poll_date","candidate_name","avg_support","avg_support_adj")
+
+poll_2020_df <- poll_2020_df %>%
+  mutate(party = case_when(candidate_name == "Donald Trump" ~ "republican",
+                           candidate_name == "Joseph R. Biden Jr." ~ "democrat"),
+         poll_date = as.Date(poll_date, "%m/%d/%Y")) %>%
+  mutate(days_left = round(difftime(elxnday_2020, poll_date, unit="days")),
+         weeks_left = round(difftime(elxnday_2020, poll_date, unit="weeks")),
+         before_convention = case_when(poll_date < dnc_2020 & party == "democrat" ~ TRUE,
+                                       poll_date < rnc_2020 & party == "republican" ~ TRUE,
+                                       TRUE ~ FALSE)) %>% filter(!is.na(party)) 
+
+poll_2020_clean <- poll_2020_df %>% filter(weeks_left < 50, weeks_left >=weeks) %>% 
+  group_by(state, candidate_name, party) %>%
+  summarize(avg_poll = mean(avg_support)) %>% filter(state != "National") %>% 
+  select(state, candidate_name, avg_poll, party) %>% mutate(period = "2016-2020") %>%
+  mutate(incumbent_party = case_when(candidate_name == "Joseph R. Biden Jr." ~ FALSE, 
+                                     candidate_name == "Donald Trump" ~ TRUE)) %>%
+  filter(state != "NE-1", state != "NE-2", state != "ME-1", state != "ME-2")
+
+NE_df <- colnames(poll_2020_clean)
+NE_df <- rbind.data.frame(NE_df, c("Nebraska", "Donald Trump", 57.9, "republican","2016-2020",TRUE))
+NE_df <- NE_df %>% row_to_names(row_number=1)
+temp <- cbind("Nebraska", "Joseph R. Biden Jr.", 40.3, "democrat","2016-2020",FALSE)
+temp <- as.data.frame(temp)
+colnames(temp) <- colnames(NE_df)
+NE_df <- rbind(NE_df, temp)
+
+DC_df <- colnames(poll_2020_clean)
+DC_df <- rbind.data.frame(DC_df, c("District of Columbia", "Donald Trump", 5.6, "republican","2016-2020",TRUE))
+DC_df <- DC_df %>% row_to_names(row_number=1)
+temp <- cbind("District of Columbia", "Joseph R. Biden Jr.", 91.0, "democrat","2016-2020",FALSE)
+temp <- as.data.frame(temp)
+colnames(temp) <- colnames(DC_df)
+DC_df <- rbind(DC_df, temp)
+
+IL_df <- colnames(poll_2020_clean)
+IL_df <- rbind.data.frame(IL_df, c("Illinois", "Donald Trump", 38, "republican","2016-2020",TRUE))
+IL_df <- IL_df %>% row_to_names(row_number=1)
+temp <- cbind("Illinois", "Joseph R. Biden Jr.", 60.5, "democrat","2016-2020",FALSE)
+temp <- as.data.frame(temp)
+colnames(temp) <- colnames(IL_df)
+IL_df <- rbind(IL_df, temp)
+
+RI_df <- colnames(poll_2020_clean)
+RI_df <- rbind.data.frame(RI_df, c("Rhode Island", "Donald Trump", 36.5, "republican","2016-2020",TRUE))
+RI_df <- RI_df %>% row_to_names(row_number=1)
+temp <- cbind("Rhode Island", "Joseph R. Biden Jr.", 62.1, "democrat","2016-2020",FALSE)
+temp <- as.data.frame(temp)
+colnames(temp) <- colnames(RI_df)
+RI_df <- rbind(RI_df, temp)
+
+SD_df <- colnames(poll_2020_clean)
+SD_df <- rbind.data.frame(SD_df, c("South Dakota", "Donald Trump", 58.8, "republican","2016-2020",TRUE))
+SD_df <- SD_df %>% row_to_names(row_number=1)
+temp <- cbind("South Dakota", "Joseph R. Biden Jr.", 39.7, "democrat","2016-2020",FALSE)
+temp <- as.data.frame(temp)
+colnames(temp) <- colnames(SD_df)
+SD_df <- rbind(SD_df, temp)
+
+WY_df <- colnames(poll_2020_clean)
+WY_df <- rbind.data.frame(WY_df, c("Wyoming", "Donald Trump", 68.0, "republican","2016-2020",TRUE))
+WY_df <- WY_df %>% row_to_names(row_number=1)
+temp <- cbind("Wyoming", "Joseph R. Biden Jr.", 28.7, "democrat","2016-2020",FALSE)
+temp <- as.data.frame(temp)
+colnames(temp) <- colnames(WY_df)
+WY_df <- rbind(WY_df, temp)
+
+poll_2020_clean <- as.data.frame(poll_2020_clean)
+
+
+poll_2020_clean <- rbind(poll_2020_clean, NE_df)
+poll_2020_clean <- rbind(poll_2020_clean, DC_df)
+poll_2020_clean <- rbind(poll_2020_clean, IL_df)
+poll_2020_clean <- rbind(poll_2020_clean, SD_df)
+poll_2020_clean <- rbind(poll_2020_clean, WY_df)
+poll_2020_clean <- rbind(poll_2020_clean, RI_df)
+
+gdp <- rep(-0.0949, 102)
+poll_2020_clean$gdp <- gdp
+poll_2020_clean$avg_poll <- as.numeric(poll_2020_clean$avg_poll)
+
+pred_data_df <- poll_2020_clean %>% left_join(state_rdi[,c(1,290)], c("state" = "State"))
+colnames(pred_data_df) <- c("state", "candidate_name","avg_poll","party", "period", "incumbent_party","gdp", "rdi_q2")
+
+pred_fund_inc <- predict(inc_fund_lm, pred_data_df %>% filter(incumbent_party == TRUE))
+pred_fund_chl <- predict(chl_fund_lm, pred_data_df %>% filter(incumbent_party == FALSE))
+pred_polls_inc <- predict(inc_polls_lm, pred_data_df %>% filter(incumbent_party == TRUE))
+pred_polls_chl <- predict(chl_polls_lm, pred_data_df %>% filter(incumbent_party == FALSE))
+pred_plus_inc <- predict(inc_plus_lm, pred_data_df %>% filter(incumbent_party == TRUE))
+pred_plus_chl <- predict(chl_plus_lm, pred_data_df %>% filter(incumbent_party == FALSE))
+
+pred_df <- cbind.data.frame(unique(pred_data_df$state), pred_fund_inc, pred_fund_chl, 
+                 pred_polls_inc, pred_polls_chl, 
+                 pred_plus_inc, pred_plus_chl)
+
+pred_win <- cbind.data.frame(unique(pred_data_df$state), 
+                             case_when(pred_df$pred_fund_inc > pred_df$pred_fund_chl ~ "Trump",
+                                       pred_df$pred_fund_inc < pred_df$pred_fund_chl ~ "Biden"),
+                             case_when(pred_df$pred_polls_inc > pred_df$pred_polls_chl ~ "Trump",
+                                       pred_df$pred_polls_inc < pred_df$pred_polls_chl ~ "Biden"),
+                             case_when(pred_df$pred_plus_inc > pred_df$pred_plus_chl ~ "Trump",
+                                       pred_df$pred_plus_inc < pred_df$pred_plus_chl ~ "Biden"))
+
+colnames(pred_win) <- c("State", "fundamentals", "polls", "plus")
+pred_win_ec <- pred_win %>% left_join(elec_col %>% filter(Year==2020), by = ("State"="State"))
+colnames(pred_win_ec) <- c("state", "fundamentals", "polls", "plus","year","EC")
+
+## electoral college
+fund_ec <- aggregate(pred_win_ec$EC, by=list(fundamental=pred_win_ec$fundamentals), FUN=sum)
+polls_ec <- aggregate(pred_win_ec$EC, by=list(fundamental=pred_win_ec$polls), FUN=sum)
+plus_ec <- aggregate(pred_win_ec$EC, by=list(fundamental=pred_win_ec$plus), FUN=sum)
+```
+
+```{r fundmap, echo=FALSE, warning = FALSE, results = FALSE}
+plot_usmap(data = pred_win_ec, regions = "states", values = "fundamentals") +
+  scale_fill_manual(values = c("blue", "red"), 
+                    name = "Projected state by fundamentals model") +
+  theme_void() + 
+  labs(title =  "Electoral Map Predicted by Fundamentals Model") +
+    theme(plot.title = element_text(face="bold"))
+```
+
+In stark contrast to [last week](Economy_post.html), the fundamentals model predicts a landslide for Trump. This change is directly due to the release of the second quarter real disposable income growth by state for the second quarter. Due to the CARES Act, stimulus payments greatly increased many people's incomes which tips the scales towards Trump. In this model, Trump is expected to win in a landslide,  with `r fund_ec[2,2]` electoral votes, while Biden wins `r fund_ec[1,2]`.
+
+```{r pollsmap, echo=FALSE, warning = FALSE, results = FALSE}
+plot_usmap(data = pred_win_ec, regions = "states", values = "polls") +
+  scale_fill_manual(values = c("blue", "red"), 
+                    name = "Projected state by fundamentals model") +
+  theme_void() + 
+  labs(title =  "Electoral Map Predicted by Polls Only Model") +
+    theme(plot.title = element_text(face="bold"))
+```
+
+This electoral map looks much reasonable, and is in line with predictions from experts. Biden wins the electoral college comfortably, with 
+
+```{r plusmap, echo=FALSE, warning = FALSE, results = FALSE}
+plot_usmap(data = pred_win_ec, regions = "states", values = "plus") +
+  scale_fill_manual(values = c("blue", "red"), 
+                    name = "Projected state by fundamentals model") +
+  theme_void() + 
+  labs(title =  "Electoral Map Predicted by Polls Plus Model") +
+    theme(plot.title = element_text(face="bold"))
+```
+
+
+[^1]: The distinction between incumbent and challenger is made by the party that last held the white house, not by the candidate.
+
+[^2]: These are defined as 1972 through 1984, 1988 through 1996, 2000 through 2012, and 2016 through 2020. Because 2016 and 2020 are the only years in the same period, this can also be thought of controlling for Trump, in a sense. 
+
+[^3]: This is done by doing leave one out validation, using both the challenger and incumbent regressions for each available state and year. I average across both the incumbent and challenger to avoid throwing more numbers at the reader. 
+
+[^4]: At the time of writing, there are five weeks to go until the election. Therefore, I use historical polling that was produced up to 24 weeks before the election, and no earlier than 5, giving each average polling equal weight. A more sophisticated model (that may be implemented in the future) would weight polls by time until the election, as suggested by [Gelman and King (2003)](https://www-jstor-org.ezp-prod1.hul.harvard.edu/stable/194212?seq=1#metadata_info_tab_contents). Their findings suggest that polls closer to the election should weigh more heavily in this average.
+
+[^5]: In a sense, this fits with [Galton (1907)](https://www-nature-com.ezp-prod1.hul.harvard.edu/articles/075450a0),  which suggests that polls in aggregate will be quite accurate due to the law of large numbers. 
+
+[^6]: Much higher and I would start to worry about overfitting. 
+
+[^7]: Data from FiveThirtyEight was last pulled on 9/26/20. Nebraska, Illinois, Rhode Island, South Dakota, Wyoming and the District of Columbia are not included in the polling averages, as there have been no state polls there that FiveThirtyEight deems trustworthy. As a stand in, I used their demographic based vote share projection. 
+
+
+
