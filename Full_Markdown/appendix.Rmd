@@ -152,4 +152,8 @@ Then, we can also look at the results for the challengers:
  summary(chl_plus_lm)
 ```
 
-## [Back to the Home Page](../index.md)
+
+
+
+
+

@@ -427,7 +427,6 @@ Because Trump greatly outperformed his polls in 2016, and Clinton underperformed
 
 From a modelling perspective, what this suggests is that I should not include fixed effects by period of time. Instead, it may be that I should look at other controls that are slow to change, like demographics, to get a similar effect without building in a massive bias for predictions in 2020.
 
-## [Back to the Home Page](../index.md)
 
 
 [^1]: The distinction between incumbent and challenger is made by the party that last held the white house, not by the candidate.
