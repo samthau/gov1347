@@ -261,6 +261,9 @@ All three versions of the economics based model I ran give Trump essentially no 
 
 What my models say is that Trump is going up against a terrible national enviornmnet, but not that he has no shot. A more sophisticated model (similar to what FiveThirtyEight and The Economist do) would  use the national enviornment as a starting point and then use other factors like polling, accounting for turnout, and shocks to come up with an eventual winner. This could happen in the form of Bayesian updating[^7], using a prior based on the economy, demographics and previous election results, and then using polling and current events to update. Once we begin to incorporate polling, this will become a viable strategy for modelling the election. 
 
+## [Back to the Home Page](../index.md)
+
+
 [^1]: Sides, John, et al. The Gamble: Choice and Chance in the 2012 Presidential Election - Updated Edition. Princeton University Press, 2014. Project MUSE muse.jhu.edu/book/64467.
 [^2]: Healy, Andrew, and Lenz, Gabriel S. “Substituting the End for the Whole: Why Voters Respond Primarily to the Election-Year Economy.” American Journal of Political Science, vol. 58, no. 1, 2014, pp. 31–47.
 [^3]: Achen, Christopher H, and Bartels, Larry M. Democracy for Realists. REV - Revised ed., Princeton University Press, 2017.

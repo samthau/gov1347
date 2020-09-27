@@ -222,7 +222,7 @@ To start, we need a basic fundamentals model for comparison. We'll use a variant
 
 Similar to last week, the R-squared value of from these regressions is quite low. The incumbent fundamentals model has an R-squared of `r round(summary(inc_fund_lm)$r.squared,  digits = 3)`, while for the challenger it is `r round(summary(chl_fund_lm)$r.squared, digits = 3)`, both relatively close to the low values from pervious fundamentals model on this blog. 
 
-The mean squared error for the incumbents is `r round(mean(abs(inc_fund_lm$residuals)^2), digits =3)`, and for the challenger it is `r round(mean(abs(chl_fund_lm$residuals)^2), digits =3)`, which is consistent with the low R-squared values. For out of sample fit, we find that the average absolute error on the vote margin[^3], across both models is `r round(out_mse[1],digits=3)`. 
+The [mean squared error](https://en.wikipedia.org/wiki/Mean_squared_error) for the incumbents is `r round(mean(abs(inc_fund_lm$residuals)^2), digits =3)`, and for the challenger it is `r round(mean(abs(chl_fund_lm$residuals)^2), digits =3)`, which is consistent with the low R-squared values. For out of sample fit, we find that the average absolute error on the vote margin[^3], across both models is `r round(out_mse[1],digits=3)`. 
 
 
 # Polls Only Model
@@ -242,7 +242,7 @@ We can first look at the linear regression for the incumbent.
 summary(inc_polls_lm)
 ```
 
-A few key pieces of information jump out. First, the R-squared value of `r round(summary(inc_polls_lm)$r.squared, digits = 3)` is much, much larger than the fundamentals model, suggesting a much better fit. Secondly, the coefficient on `avg_poll` is `0.966`, it suggests a nearly one to one relationship between the average vote share; if the average polling value for an incumbent increased by `1` percentage point, their expected vote share would increase by `0.966` percentage points. Then, we can look at the challenger regression. 
+A few key pieces of information jump out. First, the R-squared value of `r round(summary(inc_polls_lm)$r.squared, digits = 3)` is much, much larger than the fundamentals model, suggesting a much better fit. Secondly, the coefficient on `avg_poll` is 0.966, it suggests a nearly one to one relationship between the average vote share; if the average polling value for an incumbent increased by 1 percentage point, their expected vote share would increase by 0.966 percentage points. Then, we can look at the challenger regression. 
 
 ```{r polls_chl,echo=FALSE,  warning = FALSE, message = FALSE, class.output="scroll-100" }
 summary(chl_polls_lm)
@@ -258,7 +258,7 @@ To examine out of sample fit, we look at the average absolute error on the vote 
 # Polls Plus Model
 For the polls plus model, it takes the fundamentals model and adds the historical polling average as another predictor. Because this model has the most robust set of inputs, one could imagine that it is also the most accurate model. Due to this model's length and relative similarity to previous models, full details can be found in the [technical appendix](appendix.html).
 
-Unsurprisingly, the R-squared for both the incumbent and challenger is higher, at `r round(summary(inc_plus_lm)$r.squared,digits =3)` for the incumbent and `r round(summary(chl_plus_lm)$r.squared,digits =3)` for the challenger[^6]. Interestingly, for the incumbent, both the coefficients on GDP and real disposable income are negative, while the coefficient on polling average is almost exactly `1.00`. This suggests that for incumbents, the relationship between the polling average and actual results in each state is almost exactly one to one. For the challenger, the coefficient on GDP is negative, and the coefficient on vote share is `0.983`, suggesting that a similar relationship holds. 
+Unsurprisingly, the R-squared for both the incumbent and challenger is higher, at `r round(summary(inc_plus_lm)$r.squared,digits =3)` for the incumbent and `r round(summary(chl_plus_lm)$r.squared,digits =3)` for the challenger[^6]. Interestingly, for the incumbent, both the coefficients on GDP and real disposable income are negative, while the coefficient on polling average is almost exactly 1.00. This suggests that for incumbents, the relationship between the polling average and actual results in each state is almost exactly one to one. For the challenger, the coefficient on GDP is negative, and the coefficient on vote share is 0.983, suggesting that a similar relationship holds. 
 
 In terms of in sample fit, we find the the regression for the incumbent has a mean squared error of `r round(mean(abs(inc_plus_lm$residuals)^2), digits =3)`, while it is `r round(mean(abs(chl_plus_lm$residuals)^2), digits =3)` for the challenger. Consistent with having the lowest R-squared, the polls plus model appears to fit the data best in sample. 
 
@@ -410,7 +410,7 @@ plot_usmap(data = pred_win_ec, regions = "states", values = "polls") +
     theme(plot.title = element_text(face="bold"))
 ```
 
-This electoral map looks much reasonable, and is in line with predictions from experts. Biden wins the electoral college comfortably, with `r polls_ec[1,2]` electoral votes while Trump wins `r polls_ec[2,2]`. For Biden, this map looks like a relatively feasible to victory: he wins both Michigan and Pennsylvania, two key historical [tipping point](Introduction.html) states. Biden also wins North Carolina, a state that [FiveThirtyEight projects](https://projects.fivethirtyeight.com/2020-election-forecast/north-carolina/) him to win by `0.06` percentage points, and [The Economist projects](https://projects.economist.com/us-2020-forecast/president/north-carolina) Biden to win by `1.0` percentage points.
+This electoral map looks much reasonable, and is in line with predictions from experts. Biden wins the electoral college comfortably, with `r polls_ec[1,2]` electoral votes while Trump wins `r polls_ec[2,2]`. For Biden, this map looks like a relatively feasible to victory: he wins both Michigan and Pennsylvania, two key historical [tipping point](Introduction.html) states. Biden also wins North Carolina, a state that [FiveThirtyEight projects](https://projects.fivethirtyeight.com/2020-election-forecast/north-carolina/) him to win by 0.06 percentage points, and [The Economist projects](https://projects.economist.com/us-2020-forecast/president/north-carolina) Biden to win by 1.0 percentage points.
 
 ```{r plusmap, echo=FALSE, warning = FALSE, results = FALSE}
 plot_usmap(data = pred_win_ec, regions = "states", values = "plus") +
@@ -426,6 +426,8 @@ Interestingly enough, the polls plus model projects a Biden landslide. In this m
 Because Trump greatly outperformed his polls in 2016, and Clinton underperformed, the model has a strong bias towards challengers. The coefficient for the incumbent is `r round(inc_plus_lm$coefficients[6], digits =3)`, while for the challenger it is `r round(chl_plus_lm$coefficients[6], digits =3)`, representing a nearly three point swing. In 2016, there was good reason for this discrepency between models and the results: Clinton underperformed by about three points due to systemmatic biases in polling, as non-college educted white people were under-represented in polls in comparison to who turned out to vote. The majority of those people voted for Trump, swinging the election. Some have theorized that such an error may repeat itself in 2020, but many disagree on why: some believe that there Trump voters are unlikely to admit they would vote for him, but there is [little evidence](https://fivethirtyeight.com/features/trump-supporters-arent-shy-but-polls-could-still-be-missing-some-of-them/) to back up the claim. 
 
 From a modelling perspective, what this suggests is that I should not include fixed effects by period of time. Instead, it may be that I should look at other controls that are slow to change, like demographics, to get a similar effect without building in a massive bias for predictions in 2020.
+
+## [Back to the Home Page](../index.md)
 
 
 [^1]: The distinction between incumbent and challenger is made by the party that last held the white house, not by the candidate.

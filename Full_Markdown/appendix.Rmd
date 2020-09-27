@@ -1,0 +1,155 @@
+---
+title: "Appendix"
+author: "Samuel Thau"
+date: "9/26/2020"
+output:
+  rmarkdown::html_document:
+    theme: cerulean
+    
+knit: (function(inputFile, encoding) {
+  rmarkdown::render(inputFile, encoding = encoding, output_dir = "../Posts/") })    
+  
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# import libraries
+library(tidyverse)
+library(ggplot2)
+library(usmap)
+library(janitor)
+library(usmap)
+```
+
+```{css, echo=FALSE}
+.scroll-100 {
+  max-height: 250px;
+  overflow-y: auto;
+  background-color: inherit;
+}
+```
+
+## Overview
+The appendix is meant to serve as a place to include information that is not suitable for the blog, like large amounts of code output, technical details, and any other information. Each section will link to the corresponding blog post. Not every blog post will have information in the appendix. 
+
+## [3. Polls](polls.html)
+```{r pollsbase, echo=FALSE,  warning = FALSE, message = FALSE }
+# read in all data
+nat_popvote_df <- read_csv("../Data/popvote_1948-2016.csv")
+nat_poll_df    <- read_csv("../Data/pollavg_1968-2016.csv")
+
+state_popvote_df <- read_csv("../Data/popvote_bystate_1948-2016.csv")
+state_poll_df <- read_csv("../Data/pollavg_bystate_1968-2016.csv")
+
+nat_econ <- read_csv("../Data/econ.csv")
+state_rdi <- read_csv("../Data/state_rdi.csv")
+
+#build state df with econ, polls, and 
+weeks <- 5
+poll_df <- state_poll_df %>% filter(weeks_left >= weeks, weeks_left<25) %>% 
+  select(year, state, party, candidate_name, avg_poll) %>% 
+  group_by(year, state, candidate_name, party) %>%
+  summarize(avg_poll = mean(avg_poll))
+
+#build economic df at state level from rdi and national gdp
+econ_df <- state_rdi[,1:2]
+colnames(econ_df) <- c("state","rdi_q2")
+econ_df$rdi_q2 <- as.numeric(econ_df$rdi_q2)
+
+for(i in seq(from = 18, to = 290, by = 16)){
+  temp <- state_rdi[,c(1,i)]
+  colnames(temp) <- c("state","rdi_q2")
+  temp$rdi_q2 <- as.numeric(temp$rdi_q2)
+  econ_df <- rbind(econ_df, temp)
+}
+
+#add years and national gdp growth
+year_list <- seq(from = 1948, to = 2020, by=4)
+year_append <- rep(year_list[1],51)
+nat_econ_sub <- nat_econ %>% filter(year %in% year_list, quarter == 2) %>% 
+  select(year, GDP_growth_qt)
+gdp_append <- as.numeric(rep(nat_econ_sub[1,2],51))
+
+for(i in seq(from = 2, to=length(year_list), by =1)){
+  new_year = rep(year_list[i], 51)
+  new_gdp = as.numeric(rep(nat_econ_sub[i,2], 51))
+  year_append = append(year_append, new_year)
+  gdp_append = append(gdp_append, new_gdp)
+}
+
+#append year and national gdp to the econ df
+econ_df$year <- year_append
+econ_df$gdp <- gdp_append
+
+
+## Merge datasets and clean
+inc_data <- nat_popvote_df %>% select("year","party","winner", "incumbent","incumbent_party")
+
+reg_df <- poll_df %>% left_join(econ_df, by=c("state"="state","year"="year")) %>% 
+  left_join(state_popvote_df, by= c("state"="state", "year"="year")) %>%
+  left_join(inc_data, 
+            by  = c("year"="year","party" = "party" ))
+  
+reg_df$period <- ifelse(reg_df$year %in% 1972:1984, "1972-1984",
+                               ifelse(reg_df$year %in% 1988:1996, "1992-2000",
+                                      ifelse(reg_df$year %in% 2000:2012, "2000-2012", 
+                                             "2016-2020")))
+
+reg_df <- reg_df %>% mutate("d_pv"=100*D/total) %>% mutate("r_pv"=100*R/total)
+reg_df <- reg_df %>% 
+  mutate(inc_party = case_when((party=="democrat" & incumbent_party==TRUE) ~ "democrat", 
+                                 (party=="democrat" & incumbent_party==FALSE) ~ "republican",
+                                 (party=="republican" & incumbent_party==TRUE) ~ "republican",
+                                 (party=="republican" & incumbent_party==FALSE) ~ "democrat")) %>%
+  mutate(chl_party = case_when((party=="democrat" & incumbent_party==FALSE) ~ "democrat", 
+                               (party=="democrat" & incumbent_party==TRUE) ~ "republican",
+                               (party=="republican" & incumbent_party==FALSE) ~ "republican",
+                               (party=="republican" & incumbent_party==TRUE) ~ "democrat"))
+
+reg_df <- reg_df %>% 
+  mutate(inc_pv = case_when((inc_party=="republican") ~ r_pv, 
+                              (inc_party=="democrat") ~ d_pv)) %>% 
+  mutate(chl_pv = case_when(chl_party == "democrat" ~ d_pv, 
+                            chl_party == "republican" ~ r_pv))
+
+reg_df <- na.omit(reg_df)
+
+##fundamentals model
+inc_fund_lm <- lm(inc_pv ~ rdi_q2 + gdp + period + state, data = reg_df %>% filter(year < 2020, incumbent_party == TRUE))
+#summary(inc_fund_lm)
+
+chl_fund_lm <- lm(chl_pv ~ rdi_q2 + gdp + period + state, data = reg_df %>% filter(year < 2020, incumbent_party == FALSE))
+#summary(chl_fund_lm)
+
+## polls only model
+inc_polls_lm <- lm(inc_pv ~ avg_poll, data = reg_df %>% filter(year < 2020, incumbent_party == TRUE))
+chl_polls_lm <- lm(chl_pv ~ avg_poll, data = reg_df %>% filter(year < 2020, incumbent_party == FALSE))
+
+## polls and fundamentals model
+inc_plus_lm <- lm(inc_pv ~ rdi_q2 + gdp + period + state + avg_poll, data = reg_df %>% filter(year < 2020, incumbent_party == TRUE))
+#summary(inc_plus_lm)
+
+chl_plus_lm <- lm(chl_pv ~ rdi_q2 + gdp + period + state + avg_poll, data = reg_df %>% filter(year < 2020, incumbent_party == FALSE))
+#summary(chl_plus_lm)
+
+```
+
+During the blog post for polls, I built two linear models: a so called fundamentals model that is based on the economy, and the polls plus model that adds in the impact of vote shares. While the most important information was discussed in the blog post, there is some value in seeing the full regression output which is provided below. These are two sided models, meaning that there is a seperate model for candidates from the incumbent party, and from the challenging party.First, the updated fundamentals model for the incumbent:
+```{r polls_fund_inc_lm, echo=FALSE,  warning = FALSE, message = FALSE, class.output="scroll-100" }
+ summary(inc_fund_lm)
+```
+Then, for the challenger:
+```{r polls_fund_chl_lm, echo=FALSE,  warning = FALSE, message = FALSE, class.output="scroll-100" }
+ summary(chl_fund_lm)
+```
+I also built the polls plus model, that uses the fundamentals and a polling average as predictors in a linear model. For the incumbent, the regression results are as follows:
+```{r polls_plus_inc_lm, echo=FALSE,  warning = FALSE, message = FALSE, class.output="scroll-100" }
+ summary(inc_plus_lm)
+```
+Then, we can also look at the results for the challengers:
+```{r polls_plus_chl_lm, echo=FALSE,  warning = FALSE, message = FALSE, class.output="scroll-100" }
+ summary(chl_plus_lm)
+```
+
+## [Back to the Home Page](../index.md)

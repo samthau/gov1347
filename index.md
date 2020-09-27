@@ -7,5 +7,8 @@ An introduction to the blog. Covers different ways to think about election resul
 Models using the economy to predict election outcomes. National and state by state regressions of various forms.
 
 # [3. Polls](Posts/polls.html)
-Models using polls to predict election outcomes, looking at state by state versions of a fundamentals, polls only, and an all inclusive model. 
+Incorporating polls into linear regressions, following similarly to the pervious post. Shows how in certain models, including polls increases model accuracy at the state level.
+
+#[Appendix](Posts/appendix.html)
+A running log of content that does not quite fit into the blog. If updated to go along with a post, a note will be made in the corresponding blog post. 
 
