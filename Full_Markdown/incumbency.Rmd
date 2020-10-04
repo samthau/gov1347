@@ -382,14 +382,16 @@ This model predicts a Biden landslide, with Biden winning `r logit_ec[1,2]`  ele
 ```{r prob, echo=FALSE,  warning = FALSE, results = 'asis', message = FALSE, class.output = "scroll-100", max.height='250px'}
   library(data.table)
   library(knitr)
+  library(kableExtra)
   out <- cbind.data.frame(unique(pred_data_df$state),pred_log_inc)
   colnames(out) <- c("State","Predicted Probability of Trump Winning")
   out <- remove_empty(out, which = c("cols"), quiet = TRUE)
-  kable(out)
+  kbl(out)  %>% kable_paper(full_width = F) %>%
+  scroll_box(width = "500px", height = "200px") %>% kable_styling(position = "center")
 ```
 
 ## Reflections
-Looking at this version of a probibalistic model, there appear to be similar problems to the linear regressions from last week. In general, it seems that there is too much weight given to the economy this year. This suggests that I should spend some time with ensemble models, looking at tuning the hyperparameters. However, given that for the most part, these models are fairly good at predicting past elections in leave one out validation, it may be that I have to experiment with ad hoc hyperparameters. 
+Looking at this version of a probibalistic model, there appear to be similar problems to the linear regressions from last week. In general, it seems that there is too much weight given to the economy this year. This suggests that I should spend some time with ensemble models, looking at tuning the hyperparameters. However, given that for the most part, these models are fairly good at predicting past elections in leave one out validation, it may be that I have to experiment with ad hoc weighting. 
 
 In addition, it may be that I need to move away from linear models. The underlying assumption of all of the models I have used so far is that the relationship between polling, the economy, and the various indicators is linear. One possible way to change the models is to experiment with interaction terms. Another method, that I think may be more promising, is to look at some sort of Bayesian updating model. Using a fundamentals model as a prior, and then updating with polling and information on shocks could be a much more effective way to predict elections.
 
