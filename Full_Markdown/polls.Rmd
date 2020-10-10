@@ -226,7 +226,7 @@ The [mean squared error](https://en.wikipedia.org/wiki/Mean_squared_error) for t
 
 
 # Polls Only Model
-For the polls only model, I work with state level polling from 1972 onward. In many cases, polling is relatively sparse; especially earlier on, not every state has polls. In addition, because there are many polls conducted, I used an average of the polling averages as a single input. This average is calculated by taking historical polling averages produced between six months from the election up the current week and taking the mean[^4]. That value is then regressed on the incumbent or challenger vote share. Becuase this model is new, we will take a look at the full function. 
+For the polls only model, I work with state level polling from 1972 onward. In many cases, polling is relatively sparse; especially earlier on, not every state has polls. In addition, because there are many polls conducted, I used an average of the polling averages as a single input. This average is calculated by taking historical polling averages produced between six months from the election up the current week and taking the mean[^4]. That value is then regressed on the incumbent or challenger vote share. Because this model is new, we will take a look at the full function. 
 
 ```{css, echo=FALSE}
 .scroll-100 {
@@ -269,7 +269,7 @@ After seeing the varrying degree of accuracy of these three models, it is time t
 
 ```{r prediction,echo=FALSE,  warning = FALSE, message = FALSE }
 ## 2020 predictions
-poll_2020_df <- read_csv("../Data/presidential_poll_averages_2020.csv")
+poll_2020_df <- read_csv("../Data/presidential_poll_averages_2020_old.csv")
 
 
 elxnday_2020 <- as.Date("11/3/2020", "%m/%d/%Y")
@@ -354,7 +354,7 @@ poll_2020_clean <- rbind(poll_2020_clean, SD_df)
 poll_2020_clean <- rbind(poll_2020_clean, WY_df)
 poll_2020_clean <- rbind(poll_2020_clean, RI_df)
 
-gdp <- rep(-0.0949, 102)
+gdp <- rep(-0.0949, 104)
 poll_2020_clean$gdp <- gdp
 poll_2020_clean$avg_poll <- as.numeric(poll_2020_clean$avg_poll)
 
