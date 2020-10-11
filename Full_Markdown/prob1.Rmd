@@ -1,0 +1,324 @@
+---
+title: "Probabilistic Models"
+author: "Samuel Thau"
+date: "10/10/2020"
+output:
+  rmarkdown::html_document:
+    theme: cerulean
+    
+knit: (function(inputFile, encoding) {
+  rmarkdown::render(inputFile, encoding = encoding, output_dir = "../Posts/") })    
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# import libraries
+library(tidyverse)
+library(ggplot2)
+library(usmap)
+library(janitor)
+library(usmap)
+library(data.table)
+library(geofacet) ## map-shaped grid of ggplots
+library(betareg)
+
+set.seed(1234)
+
+# read in all data
+nat_popvote_df <- read_csv("../Data/popvote_1948-2016.csv")
+nat_poll_df    <- read_csv("../Data/pollavg_1968-2016.csv")
+
+state_popvote_df <- read_csv("../Data/popvote_bystate_1948-2016.csv")
+state_poll_df <- read_csv("../Data/pollavg_bystate_1968-2016.csv")
+
+nat_econ <- read_csv("../Data/econ.csv")
+state_rdi <- read_csv("../Data/state_rdi.csv")
+
+vep_df <- read_csv("../Data/vep_1980-2016.csv")
+
+# clean data
+#build state df with econ, polls, and 
+weeks <- 4
+poll_df <- state_poll_df %>% filter(weeks_left >= weeks, weeks_left<25) %>% 
+  select(year, state, party, candidate_name, avg_poll) %>% 
+  group_by(year, state, candidate_name, party) %>%
+  summarize(avg_poll = mean(avg_poll))
+
+#build economic df at state level from rdi and national gdp
+econ_df <- state_rdi[,1:2]
+colnames(econ_df) <- c("state","rdi_q2")
+econ_df$rdi_q2 <- as.numeric(econ_df$rdi_q2)
+
+for(i in seq(from = 18, to = 290, by = 16)){
+  temp <- state_rdi[,c(1,i)]
+  colnames(temp) <- c("state","rdi_q2")
+  temp$rdi_q2 <- as.numeric(temp$rdi_q2)
+  econ_df <- rbind(econ_df, temp)
+}
+
+#add years and national gdp growth
+year_list <- seq(from = 1948, to = 2020, by=4)
+year_append <- rep(year_list[1],51)
+nat_econ_sub <- nat_econ %>% filter(year %in% year_list, quarter == 2) %>% 
+  select(year, GDP_growth_qt)
+gdp_append <- as.numeric(rep(nat_econ_sub[1,2],51))
+
+for(i in seq(from = 2, to=length(year_list), by =1)){
+  new_year = rep(year_list[i], 51)
+  new_gdp = as.numeric(rep(nat_econ_sub[i,2], 51))
+  year_append = append(year_append, new_year)
+  gdp_append = append(gdp_append, new_gdp)
+}
+
+#append year and national gdp to the econ df
+econ_df$year <- year_append
+econ_df$gdp <- gdp_append
+
+
+## Merge datasets and clean
+inc_data <- nat_popvote_df %>% select("year","party","winner", "incumbent","incumbent_party")
+
+reg_df <- poll_df %>% left_join(econ_df, by=c("state"="state","year"="year")) %>% 
+  left_join(state_popvote_df, by= c("state"="state", "year"="year")) %>%
+  left_join(inc_data, 
+            by  = c("year"="year","party" = "party" ))
+
+reg_df$period <- ifelse(reg_df$year %in% 1952:1972, "1952-1976",
+                        ifelse(reg_df$year %in% 1972:1992, "1972-1992", "1996-2020"))
+
+reg_df <- reg_df %>% mutate("d_pv"=100*D/total) %>% mutate("r_pv"=100*R/total)
+reg_df <- reg_df %>% 
+  mutate(inc_party = case_when((party=="democrat" & incumbent_party==TRUE) ~ "democrat", 
+                               (party=="democrat" & incumbent_party==FALSE) ~ "republican",
+                               (party=="republican" & incumbent_party==TRUE) ~ "republican",
+                               (party=="republican" & incumbent_party==FALSE) ~ "democrat")) %>%
+  mutate(chl_party = case_when((party=="democrat" & incumbent_party==FALSE) ~ "democrat", 
+                               (party=="democrat" & incumbent_party==TRUE) ~ "republican",
+                               (party=="republican" & incumbent_party==FALSE) ~ "republican",
+                               (party=="republican" & incumbent_party==TRUE) ~ "democrat"))
+
+reg_df <- reg_df %>% 
+  mutate(inc_pv = case_when((inc_party=="republican") ~ R, 
+                            (inc_party=="democrat") ~ D)) %>% 
+  mutate(chl_pv = case_when(chl_party == "democrat" ~ D, 
+                            chl_party == "republican" ~ R))
+
+reg_df <- reg_df %>% mutate(incumbent_win = case_when(inc_party == "republican" & r_pv > d_pv ~ 1,
+                                                      inc_party == "republican" & r_pv < d_pv ~ 0, 
+                                                      inc_party == "democrat" & r_pv < d_pv ~ 1,
+                                                      inc_party == "democrat" & r_pv > d_pv ~ 0))
+
+reg_df <- reg_df %>% left_join(vep_df, by = c("state" = "state", "year" = "year"))
+
+reg_df <- reg_df %>% filter(year > 1979)
+
+reg_df <- na.omit(reg_df)
+
+
+## logit regression for probability
+inc_log <- glm(cbind(inc_pv, VEP-inc_pv) ~ rdi_q2 + gdp + state + avg_poll + period, 
+               data = reg_df %>% filter(year < 2020, incumbent_party == TRUE), family=binomial)
+
+chl_log <- glm(cbind(chl_pv, VEP-chl_pv) ~ rdi_q2 + gdp + state + avg_poll + period, 
+               data = reg_df %>% filter(year < 2020, incumbent_party == FALSE), family=binomial)
+summary(inc_log)
+summary(chl_log)
+
+# predictions for 2020
+## 2020 predictions
+poll_2020_df <- read_csv("../Data/presidential_poll_averages_2020.csv")
+elec_col <- read_csv("../Data/ElectoralCollegePost1948_adj.csv") %>% filter(Year==2020)
+remove_empty(elec_col, which = c("cols"), quiet = TRUE)
+
+
+elxnday_2020 <- as.Date("11/3/2020", "%m/%d/%Y")
+dnc_2020 <- as.Date("8/20/2020", "%m/%d/%Y")
+rnc_2020 <- as.Date("8/27/2020", "%m/%d/%Y")
+
+colnames(poll_2020_df) <- c("year","state","poll_date","candidate_name","avg_support","avg_support_adj")
+
+poll_2020_df <- poll_2020_df %>%
+  mutate(party = case_when(candidate_name == "Donald Trump" ~ "republican",
+                           candidate_name == "Joseph R. Biden Jr." ~ "democrat"),
+         poll_date = as.Date(poll_date, "%m/%d/%Y")) %>%
+  mutate(days_left = round(difftime(elxnday_2020, poll_date, unit="days")),
+         weeks_left = round(difftime(elxnday_2020, poll_date, unit="weeks")),
+         before_convention = case_when(poll_date < dnc_2020 & party == "democrat" ~ TRUE,
+                                       poll_date < rnc_2020 & party == "republican" ~ TRUE,
+                                       TRUE ~ FALSE)) %>% filter(!is.na(party)) 
+
+poll_2020_clean <- poll_2020_df %>% filter(weeks_left < 25, weeks_left >=weeks) %>% 
+  group_by(state, candidate_name, party) %>%
+  summarize(avg_poll = mean(avg_support)) %>% filter(state != "National") %>% 
+  select(state, candidate_name, avg_poll, party) %>% mutate(period = "1996-2020") %>%
+  mutate(incumbent_party = case_when(candidate_name == "Joseph R. Biden Jr." ~ FALSE, 
+                                     candidate_name == "Donald Trump" ~ TRUE)) %>%
+  filter(state != "NE-1", state != "NE-2", state != "ME-1", state != "ME-2")
+
+gdp <- rep(-0.0949, 102)
+poll_2020_clean$gdp <- gdp
+poll_2020_clean$avg_poll <- as.numeric(poll_2020_clean$avg_poll)
+
+pred_data_df <- poll_2020_clean %>% left_join(state_rdi[,c(1,290)], c("state" = "State"))
+colnames(pred_data_df) <- c("state", "candidate_name","avg_poll","party", "period", "incumbent_party","gdp", "rdi_q2")
+
+pred_data_df <- pred_data_df %>% left_join(vep_df %>% filter(year == 2016), by = c("state"="state"))
+
+
+
+# make state predictions and label them
+trump_df <- pred_data_df %>% filter(incumbent_party == TRUE)
+biden_df <- pred_data_df %>% filter(incumbent_party == FALSE)
+
+pred_prob_trump <- as.data.frame(predict(inc_log, newdata = trump_df, type = "response"))
+pred_prob_trump$state <- trump_df$state
+pred_prob_trump <- as.data.frame(pred_prob_trump)
+
+pred_prob_biden <- as.data.frame(predict(chl_log, newdata = biden_df, type = "response"))
+pred_prob_biden$state <- biden_df$state
+pred_prob_biden <- as.data.frame(pred_prob_biden)
+
+sim_df <- pred_prob_trump %>% left_join(pred_prob_biden, by = c("state"= "state")) %>% 
+  left_join(elec_col[ , colSums(is.na(elec_col)) == 0], by = c("state" = "State")) %>% left_join(vep_df %>% filter(year == 2016),
+                                                               by = c("state"="state"))
+
+colnames(sim_df) <- c("trump_p", "state", "biden_p", "year", "EC", "temp", "VEP", "VAP")
+sim_df <- sim_df %>% select(state, trump_p, biden_p, EC, VEP)
+
+
+results_df <- data.frame(state = character(0), trump_v = numeric(0), 
+                           biden_v = numeric(0), EC = numeric(0)  , sim = numeric(0))
+
+count = 10000
+for(st in sim_df$state){
+    temp_df <- sim_df %>% filter(state == st)
+    trump_vote <- rbinom(n=count, size = ceiling(temp_df$VEP), prob = temp_df$trump_p)
+    biden_vote <- rbinom(n=count, size = ceiling(temp_df$VEP), prob = temp_df$biden_p)
+
+    res_st <- cbind.data.frame(st, trump_vote, biden_vote, rep(temp_df$EC, count), seq(from = 1, to = count, by = 1))
+    colnames(res_st) = c("state", "trump_v", "biden_v", "EC","sim")
+
+    results_df <- rbind(results_df, res_st)
+}
+  
+results_df <- results_df %>% mutate(win = case_when(trump_v > biden_v ~ "Trump",
+                                                      trump_v < biden_v ~ "Biden",
+                                                      trump_v == biden_v ~ "Tie"))
+
+ec_results <- aggregate(results_df$EC, results_df %>% select(win, sim), FUN = sum)
+biden_votes <- aggregate(results_df$biden_v, results_df %>% select(sim), FUN = sum)
+trump_votes <- aggregate(results_df$trump_v, results_df %>% select(sim), FUN = sum)
+
+find_tip <- function(df){
+  dem_wins <- df %>% filter(win == 'Biden') 
+  dem_wins <- arrange(dem_wins, biden_v - trump_v)
+  dem_wins <- dem_wins %>% mutate(cumsum = cumsum(EC))
+  rep_wins <- df %>% filter(win == 'Trump') 
+  rep_wins <- arrange(rep_wins, trump_v - biden_v)
+  rep_wins <- rep_wins %>% mutate(cumsum = cumsum(EC))
+  
+  if (dem_wins[nrow(dem_wins),ncol(dem_wins)]>rep_wins[nrow(rep_wins),ncol(rep_wins)]){
+    past_tip <- dem_wins %>% filter(cumsum >= 270)
+  } else {
+    past_tip <- rep_wins %>% filter(cumsum >= 270)
+  }
+  
+  out_tip <- past_tip[1,]
+  tip <- out_tip$state
+  
+  return(tip)
+}
+
+#tipping_point <- results_df %>% group_by(sim) %>% do(data.frame(val=find_tip(.)))
+
+
+results_df <- results_df %>% mutate(margin = trump_v/(trump_v+biden_v) - biden_v/(trump_v+biden_v))
+
+results_df$state <- c(state.abb, 'DC')[match(results_df$state, c(state.name, 'District of Columbia'))]
+
+
+```
+
+## Introduction
+
+This week, I'll return to the concept of probabilistic models, taking a slightly different approach. We'll look at a binomial version of the logistic regression, and then take a look at some possible extensions. In particular, we'll take a close look at the beta-binomial model. For now, we'll only think about the theory of this model, because actually running it with the R packages I tried was going to melt my laptop. 
+
+
+## Logistic Models, Again
+[Last week](incumbency.html), I introduced logistic regressions with this equation:
+
+$$Pr(VoteShare = 200000|VoterTurnout = 5000000) = f(\beta_0+\beta_1x_1 + \beta_2 x_2+...)$$
+
+However, a close look at the regresion that I ran reveals that something like this model is not what I ran. Instead, I ran a logistic regression on a binary response variable, if the incumbent won. This week, I'll actually use a binomial response. Instead of just predicting if the incumbent wins, I predict the probability of any given voter actually turning up the polls and voting for a given candidate. If you think about how elections work, this fits quite well with the underlying process of how an election actually happens. 
+
+Just like last week, I'll use the same $x$'s in the regression: average vote share, an indicator for state, and indicator for general period of time, second quarter GDP growth at a national level, and second quarter real disposable income growth at a state level. One key difference from last week is that we can return to a two sided model, seperately estimating results for both incumbent parties and challengers. Because the form of the regression is so similar to last week, I'll leave the output to the [appendix](appendix.html). 
+
+Things get more interesting once we get the regression output, and make predictions for this year. Because we have probabilistic output, we can simulate elections. The voting in each state is simulated by a draw of a random variable:
+
+$$Votes_{si} \sim Binomial(p_{si}, VEP_s)$$
+
+The subscripts $s$ refer to different states, while the subscripts $i$ refer to incumbency status. We can then simulate a large number of elections, and look at the results. For this post, I simulated `r count` elections in total. 
+
+First, let's look at the vote share in one particular state. Because of all of the publicity surrounding tipping point states, let's look at Pennsylvania. 
+
+```{r pa, echo = FALSE, return = FALSE, warning = FALSE, message = FALSE}
+colnames(results_df) <- c("state",   "Trump Votes" ,"Biden Votes" ,"EC"   ,   "sim"    , "win" ,    "margin") 
+df <- gather(results_df %>% filter(state == "PA"), 
+             key = Vote, value = sim, c("Trump Votes", "Biden Votes"))
+ggplot(df, aes(x = sim, group = Vote, fill = Vote), alpha = 0.5 ) + 
+  geom_histogram() + 
+  labs(x="Votes", y="Frequency", color = "Legend") + ggtitle("Predicted Voting in Pennsylvania") + 
+   scale_fill_manual(values=c("Blue", "Red"))  
+```
+
+For all the talk of Pennsylvania possibly deciding the election, it does not look particularly close. We can look at a similar histogram, this time looking at vote margins for Trump, for every state (plus DC).
+
+```{r map, echo = FALSE, return = FALSE, warning = FALSE, message = FALSE, out.width = '100%'}
+
+ggplot(results_df) +
+  geom_histogram(aes(margin), bins = 10) +
+  facet_geo(~ state, scales = "free") + 
+  xlab("Vote Margin") + ylab("Frequency") + ggtitle("Trump Vote Margin Distribution")
+
+
+```
+
+While this plot is unfortunately quite difficult to read, a key problem becomes apparent: there is very little variance in the draws from the binomials. This lack of variance leads to nearly binary results, which we can see with another histogram. 
+
+```{r ec, echo = FALSE, return = FALSE, warning = FALSE, message = FALSE}
+
+ggplot(ec_results, aes(x = x, group = win, fill = win), alpha = 0.5 ) + 
+  geom_histogram() + 
+  labs(x="Electoral College Results", y="Frequency", color = "Legend") + ggtitle("Predicted Electoral College Results") + 
+   scale_fill_manual(values=c("Blue", "Red"))  
+```
+
+So, in practice, this model is no differen than previous iterations. Continuing forward, we need to come up with a way to introduce some more variance into the model. 
+
+## Possible Solutions
+There are two ideas that I can think of to make the model a little more realistic, and hopefully to add some more variance. First, we could introduce correlation between states when we draw from the binomial distributions. There is important intuition here: if the model shows particularly high turnout for a candidate in Wisconsin, there was likely high turnout for the same candidate in Pennsylvania. After some searching, I eventually reached the conclusion that building correlated binomial distributions is a rather difficult statistics question, that I may attempt in the future[^1]. A second possibility is moving away from having a specific probability in the binomial distribution, but rather a distribution. Enter the beta-binomial model. 
+
+## Beta Binomial
+The basic idea of the beta-binomial model is as follows: our outcome is stll distributed[^2] $out \sim Binomial(p, n)$, but $p$ has a distribution as well. Specifically, $p \sim Beta(\alpha, \beta)$, a [beta distribution](https://en.wikipedia.org/wiki/Beta_distribution). The beta and binomial distributions are conjugate, meaning that the math in this model is not too bad[^3]. As it turns out, after skippinig some math, we can write out a compound distribution of our outcome:
+
+$$f(k|n, \alpha, \beta) = \binom{n}{k}\frac{B(k+\alpha, n-k+\beta)}{B(\alpha, \beta)}$$
+
+Where $B(\alpha, \beta)=\frac{\Gamma(\alpha)\Gamma(\beta)}{\Gamma(\alpha+\beta)}$. In totality, this does not look too different from a binomial distribution, if you think of the $\Gamma$ function as being the generalization of factorial. While this expression looks rather ugly, we can use it to understand how to use this to estimate an election: if we can find $\alpha$ and $\beta$ from our data, then we use draws from this distribution to simulate an election as before[^4]. There are some clever ways to do this that involve reparamatarizing the beta distribution that I may explore soon. 
+
+The last question is, does this model make sense for an election? Let's start with the basic question: does this help us with the variance problem? As it turns out, part of why the beta-binomial model is used is to deal with [overdispersion](https://en.wikipedia.org/wiki/Overdispersion), which seems to be exactly the problem that we're dealing with. 
+
+Next, does it make intuitive sense? In my mind, yes. In each state, not every single person has the same probability of voting for a particular candidate. In fact, people may have very different probabilities of voting for a candidate. Having the beta distribution in the background of the binomial leads to a greater deal of freedom in the model in a reasonable way. 
+
+One particularly salient way to think about the beta distribution as modeling probabilities is to first take a simpler example. Imagine you have a big bag of coins, most of which are not fair. Some will come up heads half the time, but some will only come up heads one tenth of the time, and others will come up heads three quarters of the time. Think about a distribution of the coins: you could sort them by probability they come up heads, stacking coins with the same probability on top of each other. The height of each stack tells you the chance that a coin has that particular weight. 
+
+In the case of an election, we can repeat the same exercise, just with people instead of coins, and probability of voting for a candidate instead of the chance it comes up heads. In that sense, the beta-binomial model makes a lot of sense, and I'll explore it in the coming weeks. 
+
+
+[^1]: This [StackOverflow post](https://stackoverflow.com/questions/10535235/generate-correlated-random-numbers-from-binomial-distributions) gave the best suggestion I could find, and even they admit that this is a difficult problem. I was thinking about doing the estimation as a multinomial distribution, to avoid having to deal with the correlation problem in the first place, which may be a viable solution. At the same time, estimating parameters for a multinomial distribution is not a straightforward task either and multinomial values are generated via simulation, which is what I would have to do if I used 51 binomials.
+
+[^2]: With probability $p$ of having a "success" in each of the $n$ trials. 
+
+[^3]: Not too bad means that parts of the problem have closed form solutions. 
+
+[^4]: We still have $n$, which is the voting eligible population. 
