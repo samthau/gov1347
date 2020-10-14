@@ -16,5 +16,5 @@ Discussions of incumbency in the 2020 election, along with an introduction to pr
 Examination of a binomial model, and thinking about some alternate models that may be useful in the coming weeks. 
 
 # [Appendix](Posts/appendix.html)
-A running log of content that does not quite fit into the blog. If updated to go along with a post, a note will be made in the corresponding blog post. 
+A running log of content that does not quite fit into the blog. If updated to go along with a post, a note will be made in the corresponding blog post. Last updated for [5. Probabilistic Models](Posts/prob1.html). 
 
