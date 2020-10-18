@@ -15,6 +15,10 @@ Discussions of incumbency in the 2020 election, along with an introduction to pr
 # [5. Probabilistic Models](Posts/prob1.html)
 Examination of a binomial model, and thinking about some alternate models that may be useful in the coming weeks. 
 
+# [6. Empirical Bayes](Posts/prob2.html)
+Examination of a beta-binomial model, estimated using hierarchical empirical Bayes. 
+
 # [Appendix](Posts/appendix.html)
 A running log of content that does not quite fit into the blog. If updated to go along with a post, a note will be made in the corresponding blog post. Last updated for [5. Probabilistic Models](Posts/prob1.html). 
 
+ 

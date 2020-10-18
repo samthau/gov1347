@@ -1,0 +1,176 @@
+---
+title: "Empirical Bayes"
+author: "Samuel Thau"
+date: "10/17/2020"
+output:
+  rmarkdown::html_document:
+    theme: cerulean
+    
+knit: (function(inputFile, encoding) {
+  rmarkdown::render(inputFile, encoding = encoding, output_dir = "../Posts/") })    
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r run, include = FALSE}
+# import libraries
+library(tidyverse)
+library(ggplot2)
+library(usmap)
+library(janitor)
+library(usmap)
+library(data.table)
+library(ebbr)
+library(gamlss)
+library(kableExtra)
+
+
+election_p <- read.csv("../Data/election_p6.csv")
+biden_posterior_p <- read.csv("../Data/biden6.csv")
+trump_posterior_p <- read.csv("../Data/trump6.csv")
+ecp <- read.csv("../Data/ecp6.csv")
+```
+
+## Introduction
+[Last time](prob1.html), we began an investigation of probabilistic models to forecast the election. During the second half of the post, I discussed a beta-binomial model for forecasting. In this post, I'll explore one implementation, with a rather daunting sounding name: empirical Bayesian hierarchical modeling. We've discussed what the beta-binomial distribution is, and the first step of this process is to talk about the beta-binomial *regression*[^1]. 
+
+## Beta-Binomial Regression
+Recall from last time, the beta-binomial distribution is similar to a regular binomial distribution, but instead of having a fixed probability, the probability comes from a beta distribution. For the sake of having well defined notation, we can write:
+
+$$Votes_i \sim \textrm{Binomial}(VEP, p_i)$$
+$$p_i \sim \textrm{Beta}(\alpha_0, beta_0)$$
+In this case, we let $VEP$ be known and fixed for each state and year combination. The $i$ subscripts represent particular instances (i.e. a particular state, year, and incumbency status). Last time, I briefly mentioned re-parameterization, which will make this model much more tractable to estimate. We can re-write $p_i$ as
+
+$$p_i \sim \textrm{Beta}\left(\frac{\mu_0}{\sigma_0}, \frac{1-\mu_0}{\sigma_0}\right)$$
+Where $\mu_0$ represents the average vote share, and $\sigma_0$ represents how spread out the data is. Now, to follow through with estimation, we can write down formulas for $\mu_i$ in terms of $\mu_0$ and our data $X_i$: 
+
+$$\mu_i = \mu_0 + \mu_{X_i}f(X_i)$$
+This parameterization allows us to re-write $p_i$ as $p_i\sim \textrm{Beta}\left(\frac{\mu_i}{\sigma_0}, \frac{1-\mu_i}{\sigma_0}\right)$. For convenience, write $\alpha_{0,i} = \frac{\mu_i}{\sigma_0}$ and $\beta_{0,i} = \frac{1-\mu_i}{\sigma_0}$ which are called hyperparameters. This re-parameterization gives us all the tools we need to start estimating a model. 
+## Updating and Estimation
+What does Bayesian modeling actually entail? At its most basic, we start with something we call the *prior*, then *update* with new information to get a *posterior*. We are generally interested in the posterior distribution, as it paints the most complete picture given our information. The key to any Bayesian model is the updating step. 
+
+With a beta-binomial model, updating is quite easy if thought about in a particular way. The beta-binomial distribution lends itself extremely well to thinking about problems that can be formulated as "successes out of a total," which is one way to think about elections. Each candidate defines a success as someone voting for them, and the total is the overall number of eligble voters. 
+
+Recall the beta-binomial compound distribution:
+$$f(k|n, \alpha, \beta) = \binom{n}{k}\frac{B(k+\alpha, n-k+\beta)}{B(\alpha, \beta)}$$
+Looking at it carefully gives us a clue as to how updating works: updating a beta distribution with $n$ successes and $n-k$ failures is as simple as substituting in $k+\alpha$ and $n-k+\beta$ for $\alpha$ and $\beta$. 
+
+Now, for our prediction, this means that if we can estimate $\mu_i$ and $\sigma_0$, then we can estimate $\alpha_{0,i}$ and $\beta_{0,i}$. Getting our updated paramters $\alpha_{1,i}$ and $\beta_{1,i}$ is as easy as calculating $\alpha_{1,i} = \alpha_{0,i} + Votes_i$ and $\beta_{1,i} = \beta_{0,i} + VEP_i - Votes_i$.
+
+Then, to fit our model, we can use a similar logistic regression from last week:
+
+$$ (Votes | VEP)= f(\beta_0 + \beta_1 RDI + \beta_2 GDP + \beta_3 Poll + \beta_4 Period +\beta_5 State )$$
+With $f(x)$ being the logit function[^2]. We still fit as if we are estimating a binomial, but under the hood R is computing a beta-binomial regression. We also still fit two seperate regressions, one for incumbent parties and one for challengers[^3]. This turns out to be extremely computationally intensive[^4].
+
+## What Do We Update With?
+A keen eyed reader will have realized a serious flaw in this entire model: for our predictions in 2020, what do we update with? After all, we have no idea what voters will do in 2020, as that is what we are trying to predict. We can use $VEP$ from 2016 as a reasonable approximation for the $VEP$ this year, but we still need a base number of voters.
+
+I tried several options, that yield extremely different results (though there are common themes). We can use simple models of past elections to serve as an update for our model. I used a few different upates:
+
+1. Using 2016 voting patterns
+
+2. Using a 75%-25% ensemble[^5] of 2016 and 2012 voting patterns, respectively
+
+3. Constucting an update using 2020 polling data and 2016 voting rates
+
+One important thing to remember is that the data used to construct the updates for 2020 have reversed parties: in the past two years, the Republican party was the challenger whlie the Democrats were incumbent, while this year the roles are reversed. After some testing, I discovered something problematic: for cases 1 and 2, if you use the proper challenger data to predict Joe Biden's results, and use the incumbent data to predict Donald Trump's results, you get nonsensical electoral maps as shown in the [appendix](appendix.html). There is a very good reason for this, which I'll get to later in the post.
+
+This phenomenon is likely evidence of political polarization: people vote for Republicans or Democrats in roughly the same way, regardless of the incumbency status of the party. This discovery indicates some serious problems, becuase it means we have a major ommitted variable: political polarization[^6]. There are a number of possible ways to control for this, inluding incorporating demographic and lagged vote shares, which I will incorporate into future models. 
+
+For the time being, I'll detail update type three. We need to know that proportion of actual voters are projected to vote. A possilbe stand in for this information is the number of people who voted in 2016, which we can then weight by our polling average. One obvious problem pops up here: we are double dipping in using the polls twice. As it turns out, it makes absolutely no difference for our predictions, though it does show a potential issue with this model in general.
+
+One thing to note is that we do not have to flip the parties when deciding which one is the incumbent and which is the challenger, as the voting data we are using primarily comes from 2020 (so the parties match). We can look at the map generated by this update, first looking deterministically.  
+
+```{r map, echo=FALSE, warning = FALSE, results = FALSE, eval = TRUE}
+plot_usmap(data = election_p, regions = "states", values = "winner", labels = TRUE) +
+  scale_fill_manual(values = c("blue", "red"), 
+                    name = "Projected winner based on 2020 poll update") +
+  theme_void() + 
+  labs(title =  "Electoral Map Predicted from Poll Update") +
+  theme(plot.title = element_text(face="bold"))
+```
+
+This electoral map predicts a major Biden win, with a total of `r ecp[1,2]` electoral votes, with Trump winning `r ecp[2,2]`. Biden wins essentially every so called "swing state," including states that are generally considered long shots like North Carolina and Arizona. 
+
+## A/B Testing and Variance
+The whole reason we started looking at a beta-binomial model was to introduce more variance into the model. Becuase Trump and Biden are hoping to pull from the same group of voters, one way to see how much variance we have in the model is to compare the underlying beta distributions directly. We can do this through a process called A/B testing. A/B testing gives you the probability that the value from one distribution will be greater than another. 
+
+For comparing two Beta distributions, the problem actually has a closed form solution. However, it is extremely computationally intesive, so it becomes easier to use normal approximations for the Beta distributions. With large values of $\alpha$ and $\beta$, a Beta distribution is extremely close to a normal distribution with the same mean and variance. 
+
+We can do A/B testing on our election simulation, and see an immediate problem: the probabilities of overlap are almost all either 0 or 1, meaning that there is either a zero or one hundred percent chance that one value is greater than the other. 
+
+```{css, echo=FALSE}
+.scroll-100 {
+  max-height: 250px;
+  overflow-y: auto;
+  background-color: inherit;
+}
+```
+
+
+```{r table, echo=FALSE,  warning = FALSE, results = 'asis', message = FALSE, class.output = "scroll-100", max.height='250px'}
+  library(knitr)
+  library(kableExtra)
+
+ab_test <- function(alpha_a, beta_a,
+                     alpha_b, beta_b) {
+  u1 <- alpha_a / (alpha_a + beta_a)
+  u2 <- alpha_b / (alpha_b + beta_b)
+  var1 <- alpha_a * beta_a / ((alpha_a + beta_a) ^ 2 * (alpha_a + beta_a + 1))
+  var2 <- alpha_b * beta_b / ((alpha_b + beta_b) ^ 2 * (alpha_b + beta_b + 1))
+  pnorm(0, u2 - u1, sqrt(var1 + var2))
+}
+
+election_p <- election_p %>% mutate(ab_val = 
+                                      round(ab_test(trump_posterior_p$alpha1,trump_posterior_p$beta1,
+                                              biden_posterior_p$alpha1, biden_posterior_p$beta1), digits = 3))
+
+out <- election_p %>% dplyr::select("state", "winner", "EC", "ab_val")
+  
+  kbl(out)  %>% kable_paper(full_width = F) %>%
+  scroll_box(width = "500px", height = "200px") %>% kable_styling(position = "center")
+```
+
+The only semi-competitive state is Ohio, but with an AB test value of `0.852`, this still means that Trump has a very high chance of winning the state. Given that Ohio is not anywhere close to the tipping point state, this means that the model is essentially deterministic[^7]. In fact, careful inspection reveals that the electoral map is exactly the same as what we would have if we just used the polling data deterministically[^8]. 
+
+## Model Evaluation, Reflection, and Next Steps
+The first take away from this investigation is that more complex is not necessarily better, if not done right. While this model is significantly more complex than the one from last week, we still have not made an improvement on the problem of a lack of variance. 
+
+There are two reasons for the lack of variance, and generally poor performance of the model. Without any quantitative analysis, I would argue that this model is generally poor, as it does not utilize the key feature of a beta-binomial fit: the prior. In hindsight, this failure should have been obvious coming in, just by thinking about Bayes theorem. 
+
+Bayes theorem states that our posterior will be proportional to the prior times the likelihood[^9]. There are two ways to have the prior have minimal effect on the posterior: 
+
+1. An uninformative prior
+
+2. A likelihood with large sample
+
+In this instance of the model, we have both. Thinking back to [last week's post](prob1.html) and the further discussion in the [appendix](appendix.html), the logistic regression we fit did not do a great job of fitting the data. While the logistic regression is now being fitted to a beta distribution via maximum likelihood estimation, I am not convinced that my chosen model actually explains all the variation. As mentioned previously, splitting by incumbent or challenger party often ignores the impact of political polarization, which is a major force in elections in the modern day. It also does not include demographic data, another important factor.
+
+Second, we are working with comparatively massive sample sizes: some of the $VEP$ values are in the tens millions, meaning that the likelihood quickly overwhelms the relatively uninformative prior. While I can certainily come up with a better fitting model, fixing this sample size problem is not really possible[^10]. 
+
+The main problem with this model is clear: updating the model with a liklihood does not make much sense in this scenario. As it turns out, actually putting together a Bayesian model is significantly more involved. To do so, we actually need another layer of priors, for $\alpha$ and $\beta$ in the Beta distribution. Not only do we need hyperparameters, we need *hyperpriors*. Making the calculations for these types of models is quite complicated: I would need to utilize [Markov chain Monte Carlo](https://en.wikipedia.org/wiki/Markov_chain_Monte_Carlo) methods. Doing so would be an ambitious goal for this project, so we'll see if I am able to build such a model before the election.
+
+
+
+[^1]: This post draws heavily from [this wonderful blog](http://varianceexplained.org/r/empirical_bayes_baseball/) for both code and explanations. 
+
+[^2]: As before, data for this regression comes from the Bureau of Economic Analysis, along with polling data provided in class. Period is defined the same way as before, There are a few minor adjustments to the model for this week, to how the polling average is done. I take historical polls from four weeks through two weeks before the election and take the mean to form a crude polling average. As it turns out, this is quite similar to how the [FiveThirtyEight polling average works](https://fivethirtyeight.com/features/how-fivethirtyeights-2020-presidential-forecast-works-and-whats-different-because-of-covid-19/) so the prediction is based on similar data. 
+
+[^3]: As a reminder, this is meant to control for effects of incumbency. 
+
+[^4]: My laptop struggled to do this: it took about five minutes to compute the regressions for each version of the model. I briefly considered trying to incorporate demographic data this week, but given that the computational complexity seems to increase with the number of covariates, that will have to wait. 
+
+[^5]: In the [appendix](appendix.html), I also look at 85%-15% and 60%-40% ensembles, which have similar results. 
+
+[^6]: My initial assumption is that this problem could be corrected by accounting for party in the regressions, but ends up having minimal effect and you still get nonsensical electoral maps. This suggests that it really is political polarization. 
+
+[^7]: I briefly considered looking at actually taking beta-binomial draws, but for some reason R was having trouble computing them on my laptop, continuing the unfortunate theme from this blog post of not having enough computing power. 
+
+[^8]: This phenomenon explains the strange electoral maps for updates using the 2016 and 2012 voting data. Because the prior has essentially no effect, the only thing that matters is the ensemble of the 2016 and 2012 data, which with the flipped parties leads to non-sensical electoral maps. 
+
+[^9]: A name for the function that we use to update. 
+
+[^10]:  Another take on the issue is the actual process of the estimation in this particular implementation. The beta distribution is fit via maximum liklihood estimation to the liklihood distribution, which we had to essentially make up for prediction. Given that, of course the posterior would be heavily, heavily influenced by the liklihood and not at all influenced by the prior. 
