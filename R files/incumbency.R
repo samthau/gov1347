@@ -94,7 +94,7 @@ reg_df <- na.omit(reg_df)
 
 
 ## modified polls plus as comparison
-inc_plus_lm <- lm(inc_pv ~ rdi_q2 + gdp + state + avg_poll + period, data = reg_df %>% filter(year < 2020, incumbent_party == TRUE))
+inc_plus_lm <- lm(inc_pv ~ rdi_q2 + gdp + state + avg_poll, data = reg_df %>% filter(year < 2020, incumbent_party == TRUE))
 summary(inc_plus_lm)
 
 chl_plus_lm <- lm(chl_pv ~ rdi_q2 + gdp + state + avg_poll + period, data = reg_df %>% filter(year < 2020, incumbent_party == FALSE))
@@ -104,7 +104,7 @@ mean(abs(inc_plus_lm$residuals))
 mean(abs(chl_plus_lm$residuals))
 
 ## logit regression for incumbent vote share
-inc_log <- glm(incumbent_win ~ rdi_q2 + gdp + state + avg_poll + period, 
+inc_log <- glm(incumbent_win ~ rdi_q2 + gdp + state + avg_poll, 
                data = reg_df %>% filter(year < 2020, incumbent_party == TRUE), family=binomial)
 summary(inc_log)
 

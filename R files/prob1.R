@@ -104,7 +104,7 @@ reg_df <- na.omit(reg_df)
 
 
 ## logit regression for probability
-inc_log <- glm(cbind(inc_pv, VEP-inc_pv) ~ rdi_q2 + gdp + state + avg_poll + period, 
+inc_log <- glm(cbind(inc_pv, VEP-inc_pv) ~ rdi_q2 + gdp + state + avg_poll, 
                data = reg_df %>% filter(year < 2020, incumbent_party == TRUE), family=binomial)
 
 chl_log <- glm(cbind(chl_pv, VEP-chl_pv) ~ rdi_q2 + gdp + state + avg_poll + period, 

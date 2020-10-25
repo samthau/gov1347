@@ -1,0 +1,42 @@
+---
+title: "Campaigns, Polarization, and Demographics"
+author: "Samuel Thau"
+date: "10/18/2020"
+output:
+  rmarkdown::html_document:
+    theme: cerulean
+    
+knit: (function(inputFile, encoding) {
+  rmarkdown::render(inputFile, encoding = encoding, output_dir = "../Posts/") })    
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+Because [this week's main post](prob2.html) was mostly a lesson in why you need to carefully think through model assumptions before implementing them, I decided to do a short second post so that I have something more insightful for the week. One thing that came up in the post was the importance of political polarization and parties, something that I have not really addressed in the blog thus far. Connected to that issue are the topics of demographics and campaigns. I'll begin with a discussion of campaigns, and why I am not planning on integrating them into any of my models. Then, I'll talk about political polarization and demographics, and go through a brief model discussing them.
+
+## Why Campaigns Don't Matter
+to be completed later
+
+## Why Polarization Matters
+Since the 1980s, the United States has experienced greater and greater degrees of political polarization. What this means is that people are more likely to stick with one particular party, regardless of the candidate. There are many types and definitions for political polarization, but the most relevant kind for elections is mass polarization, meaning the polarization of people within the United States. For election forecasting, this means that how I've been dealing with incumbent parties systematically excludes a huge piece of the puzzle. 
+
+Up to this point, I dealt with incumbency via a two sided model, with two seperate models for incumbent and challenger parties. However, I never took party into account in any way, meaning that party affilitation (and therefore polarization) are an ommitted variable. 
+
+## Incorporating Demographic Data
+Incorporating demographic data helps the models in two distinct ways: first, it serves as a control across states, and second, it adds a vector to account for time invariant party affiliation trends. Because I have been working with pooled models, adding in demographic information as a covariate in regressions gives a related term for each state, meaning that it forces outcomes for different states to be at least a little bit correlated. Second, because different blocs of people tend to vote for particular parties, demographics can serve as a proxy for political polarization. For example, African American voters [tend to vote for Democrats](https://www.nbcnews.com/politics/2020-election/journey-power-history-black-voters-1976-2020-n1029581), often in large numbers[^1]. An added bonus of incorporating demographic data is that we can simulate particular demographic surges in turnout, something that we'll look at when we talk about shocks next week. 
+
+## New Models
+For this post, I'm going to compare two different logistic models that account for demographic and party data. We'll look at two different two sided models: one that is two sided based on incumbency, and one that is two sided based on party. 
+
+The two sided model based on party could have issues when used on historical data, as it would not be able to account for party effects changing dramatically over time. However, given that we are constrained by data only going back to the 1992 election, I am less worried about this problem. 
+
+To be a little more precise, our new model for 
+
+
+
+
+[^1]: African American voters are tend to decide the Democratic primary - since 1992, every Democratic candidate who won the majority of African American voters in the primary went on to win the nomination including Joe Biden in 2020. However, there is not a straightforward cause and effect relationship here: African American voters are also [much more likley to back establishment candidates](https://fivethirtyeight.com/features/why-do-black-democrats-usually-prefer-establishment-candidates/), who are already more likley to win the nomination. 

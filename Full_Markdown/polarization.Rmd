@@ -1,0 +1,576 @@
+---
+title: "Parties and Uncertainty"
+author: "Samuel Thau"
+date: "10/24/2020"
+output:
+  rmarkdown::html_document:
+    theme: cerulean
+    
+knit: (function(inputFile, encoding) {
+  rmarkdown::render(inputFile, encoding = encoding, output_dir = "../Posts/") })    
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+
+##libraries
+library(tidyverse)
+library(ggplot2)
+library(usmap)
+library(janitor)
+library(usmap)
+library(data.table)
+library(geofacet) ## map-shaped grid of ggplots
+library(stargazer)
+
+
+# read in all data
+nat_popvote_df <- read_csv("../Data/popvote_1948-2016.csv")
+nat_poll_df    <- read_csv("../Data/pollavg_1968-2016.csv")
+
+state_popvote_df <- read_csv("../Data/popvote_bystate_1948-2016.csv")
+state_poll_df <- read_csv("../Data/pollavg_bystate_1968-2016.csv")
+
+nat_econ <- read_csv("../Data/econ.csv")
+state_rdi <- read_csv("../Data/state_rdi.csv")
+
+vep_df <- read_csv("../Data/vep_1980-2016.csv")
+
+# clean data
+#build state df with econ, polls, and 
+weeks <- 1
+poll_df <- state_poll_df %>% filter(weeks_left >= weeks, weeks_left<5) %>% 
+  select(year, state, party, candidate_name, avg_poll) %>% 
+  group_by(year, state, candidate_name, party) %>%
+  summarize(avg_poll = mean(avg_poll))
+
+#build economic df at state level from rdi and national gdp
+econ_df <- state_rdi[,1:2]
+colnames(econ_df) <- c("state","rdi_q2")
+econ_df$rdi_q2 <- as.numeric(econ_df$rdi_q2)
+
+for(i in seq(from = 18, to = 290, by = 16)){
+  temp <- state_rdi[,c(1,i)]
+  colnames(temp) <- c("state","rdi_q2")
+  temp$rdi_q2 <- as.numeric(temp$rdi_q2)
+  econ_df <- rbind(econ_df, temp)
+}
+
+#add years and national gdp growth
+year_list <- seq(from = 1948, to = 2020, by=4)
+year_append <- rep(year_list[1],51)
+nat_econ_sub <- nat_econ %>% filter(year %in% year_list, quarter == 2) %>% 
+  select(year, GDP_growth_qt)
+gdp_append <- as.numeric(rep(nat_econ_sub[1,2],51))
+
+for(i in seq(from = 2, to=length(year_list), by =1)){
+  new_year = rep(year_list[i], 51)
+  new_gdp = as.numeric(rep(nat_econ_sub[i,2], 51))
+  year_append = append(year_append, new_year)
+  gdp_append = append(gdp_append, new_gdp)
+}
+
+#append year and national gdp to the econ df
+econ_df$year <- year_append
+econ_df$gdp <- gdp_append
+
+
+## Merge datasets and clean
+pol_data <- nat_popvote_df %>% select("year","party","winner", "incumbent","incumbent_party")
+
+reg_df <- poll_df %>% left_join(econ_df, by=c("state"="state","year"="year")) %>% 
+  left_join(state_popvote_df, by= c("state"="state", "year"="year")) %>%
+  left_join(pol_data, 
+            by  = c("year"="year","party" = "party" ))
+
+
+reg_df <- reg_df %>% 
+  mutate(inc_party = case_when((party=="democrat" & incumbent_party==TRUE) ~ "democrat", 
+                               (party=="democrat" & incumbent_party==FALSE) ~ "republican",
+                               (party=="republican" & incumbent_party==TRUE) ~ "republican",
+                               (party=="republican" & incumbent_party==FALSE) ~ "democrat")) %>%
+  mutate(chl_party = case_when((party=="democrat" & incumbent_party==FALSE) ~ "democrat", 
+                               (party=="democrat" & incumbent_party==TRUE) ~ "republican",
+                               (party=="republican" & incumbent_party==FALSE) ~ "republican",
+                               (party=="republican" & incumbent_party==TRUE) ~ "democrat"))
+
+reg_df <- reg_df %>% 
+  mutate(inc_pv = case_when((inc_party=="republican") ~ R_pv2p, 
+                            (inc_party=="democrat") ~ D_pv2p)) %>% 
+  mutate(chl_pv = case_when(chl_party == "democrat" ~ D_pv2p, 
+                            chl_party == "republican" ~ R_pv2p))
+
+reg_df <- reg_df %>% mutate(incumbent_win = case_when(inc_party == "republican" & R_pv2p > D_pv2p ~ 1,
+                                                      inc_party == "republican" & R_pv2p < D_pv2p ~ 0, 
+                                                      inc_party == "democrat" & R_pv2p < D_pv2p ~ 1,
+                                                      inc_party == "democrat" & R_pv2p > D_pv2p ~ 0))
+
+reg_df <- reg_df %>% 
+  mutate(inc_votes = case_when((inc_party=="republican") ~ R, 
+                            (inc_party=="democrat") ~ D)) %>% 
+  mutate(chl_votes = case_when(chl_party == "democrat" ~ D, 
+                            chl_party == "republican" ~ R))
+reg_df <- reg_df %>% left_join(vep_df, by = c("state" = "state", "year" = "year"))
+
+reg_df <- na.omit(reg_df)
+
+reg_df <- reg_df %>% mutate_at(vars(VEP), funs(round(.)))
+
+## do regressions for in sample fit
+inc_log_base <- glm(cbind(inc_votes, VEP-inc_votes) ~ rdi_q2 + gdp + state + avg_poll, 
+               data = reg_df %>% filter(year < 2020, incumbent_party == TRUE), family=binomial)
+
+chl_log_base <- glm(cbind(chl_votes, VEP-chl_votes) ~ rdi_q2 + gdp + state + avg_poll, 
+               data = reg_df %>% filter(year < 2020, incumbent_party == FALSE), family=binomial)
+
+inc_log_cont <- glm(cbind(inc_votes, VEP-inc_votes) ~ rdi_q2 + gdp + state + avg_poll+ inc_party, 
+                    data = reg_df %>% filter(year < 2020, incumbent_party == TRUE), family=binomial)
+
+chl_log_cont <- glm(cbind(chl_votes, VEP-chl_votes) ~ rdi_q2 + gdp + state + avg_poll + inc_party, 
+                    data = reg_df %>% filter(year < 2020, incumbent_party == FALSE), family=binomial)
+
+## summaries of models
+# summary(inc_log_base)
+# summary(chl_log_base)
+# summary(inc_log_cont)
+# summary(chl_log_cont)
+
+
+##
+## do regressions for in sample fit
+dem_log_base <- glm(cbind(D, VEP-D) ~ rdi_q2 + gdp + state + avg_poll, 
+                    data = reg_df %>% filter(year < 2020, party == "democrat"), family=binomial)
+
+rep_log_base <- glm(cbind(R, VEP-R) ~ rdi_q2 + gdp + state + avg_poll, 
+                    data = reg_df %>% filter(year < 2020, party == "republican"), family=binomial)
+
+dem_log_cont <- glm(cbind(D, VEP-D) ~ rdi_q2 + gdp + state + avg_poll+ incumbent_party, 
+                    data = reg_df %>% filter(year < 2020, party == "democrat"), family=binomial)
+
+rep_log_cont <- glm(cbind(R, VEP-R) ~ rdi_q2 + gdp + state + avg_poll + incumbent_party, 
+                    data = reg_df %>% filter(year < 2020, party == "republican"), family=binomial)
+
+## summaries of models
+# summary(dem_log_base)
+# summary(rep_log_base)
+# summary(dem_log_cont)
+# summary(rep_log_cont)
+
+
+```
+
+
+
+## Introduction
+During section this week, we discussed the partisan effects of shocks, and in general the importance of political polarization on elections. During the first half of the blog post, I'll explore the predictive power of different types of two sided models over time. In the second half, I'll return to the issue of uncertainty in forecasts, this time using a type of hierarchical model to generate election outcomes. 
+
+## Two Sided Models
+For most of this blog, I've used a two sided model based on incumbency. The reasoning behind this choice is to try to control for all of the advantages that an incumbent president (or incumbent party)[^1]. However, as briefly discussed last week, I have not accounted for the role of particular parties in most of the models I have looked at. 
+
+This week, I decided to compare several two sided models, to see which are the most effective at forecasting on a state by state basis. The baseline will be the two sided model that I have been using for the past several weeks: a binomial model that uses a polling average[^2], second quarter national GDP, second quarter state level real disposable income[^3], and a state fixed effects indicator. I split the data based on if the party was incumbent, to control for the impacts of incumbency. 
+
+Now, does this make sense? Think in the very short-term: does it make sense to treat Donald Trump completley differently as a candidate in two elections four years apart? The answer is not entirely clear. To consider the problem, I decided to build a two sided model that is identical to the baseline model I have been using, but splitting by party instead of incumbency status. 
+
+As an addition to these baseline modles, I also added a control for the opposite factor. In the incumbent/challenger model, this is an indicator for party, and in the party model, this is an indicator for party incumbency status. 
+
+## In and Out of Sample Fits
+We can first look at the regression results to think about in sample fit. We can first look at the two sided model based on incumbency, starting with the incumbenct party side:
+
+```{css, echo=FALSE}
+.scroll-100 {
+  max-height: 250px;
+  overflow-y: auto;
+  background-color: inherit;
+}
+```
+
+```{r, echo=FALSE,  warning = FALSE, message = FALSE, class.output="scroll-100" }
+summary(inc_log_cont)
+```
+
+Then, compare to the challenger party side:
+
+```{r, echo=FALSE,  warning = FALSE, message = FALSE, class.output="scroll-100" }
+summary(chl_log_cont)
+```
+
+There are a few things to note when comparing these results to previous iterations. First, the coeffiicent on the party is statistically significant, suggesting that this was a smart addition to the model. Second, the deviances are still quite high. For both the incumbent and challenger, the null deviance is an order of magnitude larger than the residual deviance, which is a good sign, but the residual deviance is still extremely large. This suggests an all together mediocre fit, meaning that improvements should be made for next week's final model. We can also look at the two sided model based on a Republican and Democrat split. First, look at the Republican side:
+
+```{r, echo=FALSE,  warning = FALSE, message = FALSE, class.output="scroll-100" }
+summary(rep_log_cont)
+```
+
+And then also the Democrat side. 
+
+```{r, echo=FALSE,  warning = FALSE, message = FALSE, class.output="scroll-100" }
+summary(dem_log_cont)
+```
+
+We have the same results with the null deviances being an order of magnitude larger than the residual deviances, but the residual deviances still being on the order of ten to the sixth. One thing to note is that both sides of the party based model have higher residual and null deviances than the incumbency based model. While all of this gives us a general idea of in sample fit, the more interesting question is that of out of sample prediction. 
+
+To assess out of sample prediction, I conducted leave one out validation for every state and year combination going back to 1980, for which we have reliable state polling data. I then recorded the accuracy for each model in each year. Accuracy is defined as the number of states correctly predicted in a year, divided by the number of states that we make predictions about. We can look at a plot over time. 
+
+```{r echo = FALSE, return = FALSE, warning = FALSE, message = FALSE}
+check_out <- function(year, state){
+  #check
+  check <- reg_df$inc_pv[reg_df$year == year & reg_df$state == state & reg_df$incumbent_party == TRUE]
+
+  if (length(check)>0){
+    
+    #dataframes excluding the row (incumbency/party is backwards as everything is negated)
+    inc_df <- reg_df %>% filter(!(incumbent_party == FALSE & year == year & state == state))
+    chl_df <- reg_df %>% filter(!(incumbent_party == TRUE & year == year & state == state))
+    dem_df <- reg_df %>% filter(!(year == year && state == state && party == "republican"))
+    rep_df <- reg_df %>% filter(!(year == year && state == state && party == "democrat"))
+
+    #prediction dataframes
+    inc_p <- reg_df[reg_df$year == year & reg_df$state == state & reg_df$incumbent_party == TRUE,]
+    chl_p <- reg_df[reg_df$year == year & reg_df$state == state & reg_df$incumbent_party == FALSE,]
+    dem_p <- reg_df[reg_df$year == year & reg_df$state == state & reg_df$party == "democrat",]
+    rep_p <- reg_df[reg_df$year == year & reg_df$state == state & reg_df$party == "republican",]
+    
+    #true vote shares
+    true_inc_share <- inc_p$inc_votes / inc_p$VEP
+    true_chl_share <- chl_p$chl_votes / chl_p$VEP
+    true_dem_share <- dem_p$D / dem_p$VEP
+    true_rep_share <- rep_p$R / rep_p$VEP
+    
+    ## incumbency model fit
+    inc_log_base_ <- glm(cbind(inc_votes, floor(VEP)-inc_votes) ~ rdi_q2 + gdp + state + avg_poll,
+                        data = inc_df, family=binomial)
+
+    chl_log_base_ <- glm(cbind(chl_votes, floor(VEP)-chl_votes) ~ rdi_q2 + gdp + state + avg_poll,
+                        data = chl_df, family=binomial)
+
+    inc_log_cont_ <- glm(cbind(inc_votes, floor(VEP)-inc_votes) ~ rdi_q2 + gdp + state + avg_poll+ inc_party,
+                        data = inc_df, family=binomial)
+
+    chl_log_cont_ <- glm(cbind(chl_votes, floor(VEP)-chl_votes) ~ rdi_q2 + gdp + state + avg_poll + inc_party,
+                        data = chl_df, family=binomial)
+
+    # incumbency model prediciton
+    pred_inc_base_ <- predict(inc_log_base_, inc_p, type = "response")[[1]]
+    pred_chl_base_ <- predict(chl_log_base_, chl_p, type = "response")[[1]]
+    pred_inc_cont_ <- predict(inc_log_cont_, inc_p, type = "response")[[1]]
+    pred_chl_cont_ <- predict(chl_log_cont_, chl_p, type = "response")[[1]]
+    
+    ##party model fit
+    dem_log_base_ <- glm(cbind(D, floor(VEP)-D) ~ rdi_q2 + gdp + state + avg_poll,
+                        data = dem_df, family=binomial)
+
+    rep_log_base_ <- glm(cbind(R, floor(VEP)-R) ~ rdi_q2 + gdp + state + avg_poll,
+                        data = rep_df, family=binomial)
+
+    dem_log_cont_ <- glm(cbind(D, floor(VEP)-D) ~ rdi_q2 + gdp + state + avg_poll+ incumbent_party,
+                        data = dem_df, family=binomial)
+
+    rep_log_cont_ <- glm(cbind(R, floor(VEP)-R) ~ rdi_q2 + gdp + state + avg_poll + incumbent_party,
+                        data = rep_df, family=binomial)
+
+    pred_dem_base_ <- predict(dem_log_base_, dem_p, type = "response")[[1]]
+    pred_rep_base_ <- predict(rep_log_base_, rep_p, type = "response")[[1]]
+    pred_dem_cont_ <- predict(dem_log_cont_, dem_p, type = "response")[[1]]
+    pred_rep_cont_ <- predict(rep_log_cont_, rep_p, type = "response")[[1]]
+    
+    c(year, state,
+      incumbent_base = (pred_inc_base_ > pred_chl_base_) == (true_inc_share > true_chl_share),
+      incumbent_control = (pred_inc_cont_ > pred_chl_cont_) == (true_inc_share > true_chl_share),
+      party_base = (pred_dem_base_ > pred_rep_base_) == (true_dem_share > true_rep_share),
+      party_control = (pred_dem_cont_ > pred_rep_cont_) == (true_dem_share > true_rep_share)
+    )
+  }else{
+    c(NA, NA, NA, NA, NA, NA)
+  }
+}
+
+year_list <- seq(from = 1980, to = 2016, by = 4)
+state_list <- unique(reg_df$state)
+
+outsamp_dflist <- sapply(year_list, function(year){sapply(state_list, function(state) check_out(year,state))})
+
+outsamp_df <- cbind("year", "state",
+                        "inc_base_correct","inc_control_correct","party_base_correct",  "party_control_correct")
+
+items <- 6
+
+for(j in seq(from = 1, to = 10, by =1)){
+  for(i in seq(from = 1, to = 301, by = items)){
+    start <- i
+    stop <- i+items -1
+    temp <- outsamp_dflist[start:stop, j]
+    outsamp_df <- rbind(outsamp_df, temp)
+  }
+}
+
+rownames(outsamp_df) <- NULL
+outsamp_df <- outsamp_df %>% row_to_names(row_number=1)
+outsamp <- as.data.frame(na.omit(outsamp_df))
+
+inc_df <- outsamp %>% group_by(year) %>% summarise(correct = sum(inc_base_correct == TRUE)) %>%
+  left_join(outsamp %>% count(year), by = c("year" = "year")) %>% 
+  mutate(Incumbency = correct/n)
+
+inc_cont_df <- outsamp %>% group_by(year) %>% summarise(correct = sum(inc_control_correct == TRUE)) %>%
+  left_join(outsamp %>% count(year), by = c("year" = "year")) %>% 
+  mutate(Incumbency_Control = correct/n)
+
+party_df <- outsamp %>% group_by(year) %>% summarise(correct = sum(inc_base_correct == TRUE)) %>%
+  left_join(outsamp %>% count(year), by = c("year" = "year")) %>% 
+  mutate(Party = correct/n)
+
+party_cont_df <- outsamp %>% group_by(year) %>% summarise(correct = sum(party_control_correct == TRUE)) %>%
+  left_join(outsamp %>% count(year), by = c("year" = "year")) %>% 
+  mutate(Party_Control = correct/n)
+
+accuracy_table <- inc_df %>% select(year, Incumbency) %>%
+  left_join(inc_cont_df %>% select(Incumbency_Control, year), by = c('year' = 'year')) %>%
+  left_join(party_df %>% select(Party, year), by = c('year' = 'year')) %>%
+  left_join(party_cont_df %>% select(Party_Control, year), by = c('year' = 'year'))
+
+```
+
+```{r echo = FALSE, return = FALSE, warning = FALSE, message = FALSE}
+library(reshape2)
+graph_df <- accuracy_table %>% select(year, Incumbency_Control, Party_Control)
+colnames(graph_df) <- c("Year", "Incumbency Model", "Party Model")
+
+graph_df <- melt(graph_df, id = c("Year"))
+colnames(graph_df) <- c("Year", "Model", "Accuracy")
+
+
+ggplot(graph_df, aes(x = Year, y = Accuracy, group = Model, color = Model)) + geom_point() + 
+  geom_line() + theme_minimal() + theme(panel.grid.major = element_blank(), 
+                                        panel.grid.minor = element_blank(),
+                                        panel.background = element_blank(), 
+                                        axis.line = element_line(colour = "grey"),
+                                        legend.key = element_rect(fill="transparent", colour=NA))+
+  scale_color_manual(values=c("deepskyblue","firebrick")) + labs(title = "Prediction Accuracy Over Time")
+
+
+```
+
+There's no clear trend of any kind, suggesting that both models are suceptible to impacts from other factors. One thing to note is that on the whole, the prediction accuracy is quite high. The minimum is in 1980, when the party model predicts 32 out of the 37 states with data correctly. We can also look at which states the models get wrong, to see if there are any patterns there. 
+
+```{r echo = FALSE, return = FALSE, warning = FALSE, message = FALSE}
+wrong_class <- outsamp %>% group_by(year) %>% select(year, state, inc_control_correct, party_control_correct) %>%
+  filter(inc_control_correct == FALSE | party_control_correct == FALSE)
+
+wrong_inc <- wrong_class %>% filter(inc_control_correct==FALSE)%>%select(year, state)
+wrong_inc <- wrong_inc %>%
+  group_by(year) %>%
+  mutate(States=map_chr(state, ~toString(state))) %>% select(year, States) %>% group_by(year)
+wrong_inc = wrong_inc[!duplicated(wrong_inc$States),]
+
+wrong_party <- wrong_class %>% filter(party_control_correct==FALSE)%>%select(year, state)
+wrong_party <- wrong_party %>%
+  group_by(year) %>%
+  mutate(States=map_chr(state, ~toString(state))) %>% select(year, States) %>% group_by(year)
+wrong_party = wrong_party[!duplicated(wrong_party$States),]
+
+wrong_full <- wrong_inc %>% left_join(wrong_party, by = c("year" = "year"))
+colnames(wrong_full) <- c("Year", "States Incorrectly Predicted By Incumbency Model","States Incorrectly Predicted by State Model" )
+
+library(kableExtra)
+kbl(wrong_full)  %>% kable_paper(full_width = F) %>% kable_styling(position = "center")
+
+
+```
+
+The models tend to miss similar states. In recent years, they seem to have had trouble with what we would usually call swing states, like Florida, Pennsylvannia and Wisconsin. There is no clear patter here, which suggests we are missing a host of variables. These could be demographics, or some sort of uniform swing[^4].
+
+## Uncertainty: Voting Distributions
+In the past two weeks, I have made attempts to add uncertainty into my predictions, with relatively little success. This week, I'll add two dimensions of uncertainty: one familiar, one new. To start, our base model will be the two sided incumbency model that includes a control for parties, which we just took a look at. 
+
+Because the model is based on a binomial, we are predicting the probability that an eligible voter will vote for a particular candidate. As [discussed previously](prob1.html), a reasonable assumption to make is that not everyone votes in the same way, and instead that voting behavior comes from a [beta distribution](https://en.wikipedia.org/wiki/Beta_distribution). Unlike last week, where I used empirical Bayes to build a hierarchical model, this week I'm going to something more straightforward. 
+When a prediction is made with any type of linear model[^5], the predicted output is thought of the mean of a distribution. The associated value also has a variance, which can be calculated from the data. The trick that I am using this week is what's called the [method of moments](https://en.wikipedia.org/wiki/Method_of_moments_(statistics)): because the mean and variance of a beta distribution can be calculated from its parameters, I can set up a system of equations to solve for the parameters for a given mean and variance. 
+
+There's just one problem with this approach, that's specific to modeling the 2020 election. The variance on the predicted voting probabilites for 2020 are *tiny.* While most of the predictions on are on the order of 10 to the -1 or -2, many of the variances are on the order of 10 to the -6 or smaller. This means that if the voting probability is the only thing that has a variance, we still have an essentially deterministic model. 
+
+## Uncertainty: Turnout
+One of the big stories of the 2020 election is COVID-19, both on the campgain trail and for forecasting the election. Thinking about how to model COVID is hard, because there are so many dimensions it might impact, some of which are harder to account for than others. Theoretically, I already account for people changing their vote because of COVID by including polling data. 
+
+One key area that I have not addressed is voter turnout, something that is greatly influenced by COVID-19 (and other factors). Interestingly enough, turnout in primaries after COVID became a national issue increased by 50%. In addition, because of expanded voting by mail, turnout may greatly increase. At the same time, social distancing measures, and fear of the pandemic may depress in person turnout. [538's Nate Silver predicts](https://fivethirtyeight.com/features/how-fivethirtyeights-2020-presidential-forecast-works-and-whats-different-because-of-covid-19/) a roughly 50% increase in error when predicting turnout. Other sophisticated models like that of [The Economist](https://projects.economist.com/us-2020-forecast/president/how-this-works) also make efforts to account for variability in turnout, but they are less specific in how they account for the uncertainty. 
+
+
+## A Model
+In this model,  I'll add a very basic way of adding variability to voter turnout. Instead of the eligible voting population being fixed in each state, it will be drawn from a normal distribution. The normal distribution will have the mean of the eligible population in that state, and variance based on the historical voting eligible population. For each of the 10,000 simulations of the election, the model progresses as follows:
+
+1. The voting population is drawn from a normal distribution, with mean of the voting eligible population in that state in 2016 and standard deviation based on the historical standard deviation in the size of the voting eligible population times 1.5, to account for increased variance in turnout. 
+
+2. The probability of voting for each candidate is drawn from a beta distribution with mean and variance derived from the two sided logistic regression model.
+
+3. The voting process is simulated as a binomial process, based on values from the first two steps.
+
+```{r echo = FALSE, return = FALSE, warning = FALSE, message = FALSE}
+inc_reg_df <- reg_df %>% filter(incumbent_party == TRUE)
+chl_reg_df <- reg_df %>% filter(incumbent_party == FALSE)
+
+## regressions for in sample fit and prediction
+inc_log_demo <- glm(cbind(inc_votes, VEP-inc_votes) ~ state + avg_poll + party + gdp + rdi_q2, 
+                    data = inc_reg_df, family=binomial)
+
+chl_log_demo <- glm(cbind(chl_votes, floor(VEP)-chl_votes) ~ state + avg_poll + party + gdp + rdi_q2, 
+                    data = chl_reg_df, family=binomial)
+
+
+## do predictions
+## 2020 predictions
+poll_2020_df <- read_csv("../Data/presidential_poll_averages_2020.csv")
+elec_col <- read_csv("../Data/ElectoralCollegePost1948_adj.csv") %>% filter(Year==2020)
+elec_col <- remove_empty(elec_col, which = c("cols"), quiet = TRUE)
+
+
+elxnday_2020 <- as.Date("11/3/2020", "%m/%d/%Y")
+dnc_2020 <- as.Date("8/20/2020", "%m/%d/%Y")
+rnc_2020 <- as.Date("8/27/2020", "%m/%d/%Y")
+
+colnames(poll_2020_df) <- c("year","state","poll_date","candidate_name","avg_support","avg_support_adj")
+
+poll_2020_df <- poll_2020_df %>%
+  mutate(party = case_when(candidate_name == "Donald Trump" ~ "republican",
+                           candidate_name == "Joseph R. Biden Jr." ~ "democrat"),
+         poll_date = as.Date(poll_date, "%m/%d/%Y")) %>%
+  mutate(days_left = round(difftime(elxnday_2020, poll_date, unit="days")),
+         weeks_left = round(difftime(elxnday_2020, poll_date, unit="weeks")),
+         before_convention = case_when(poll_date < dnc_2020 & party == "democrat" ~ TRUE,
+                                       poll_date < rnc_2020 & party == "republican" ~ TRUE,
+                                       TRUE ~ FALSE)) %>% filter(!is.na(party)) 
+
+poll_2020_clean <- poll_2020_df %>% filter(weeks_left < 5, weeks_left >=weeks) %>% 
+  group_by(state, candidate_name, party) %>%
+  summarize(avg_poll = mean(avg_support)) %>% filter(state != "National") %>% 
+  select(state, candidate_name, avg_poll, party) %>% mutate(period = "1996-2020") %>%
+  mutate(incumbent_party = case_when(candidate_name == "Joseph R. Biden Jr." ~ FALSE, 
+                                     candidate_name == "Donald Trump" ~ TRUE)) %>%
+  filter(state != "NE-1", state != "NE-2", state != "ME-1", state != "ME-2") 
+
+
+gdp <- rep(-0.0949, 102)
+poll_2020_clean$gdp <- gdp
+poll_2020_clean$avg_poll <- as.numeric(poll_2020_clean$avg_poll)
+
+pred_data_df <- poll_2020_clean %>% left_join(state_rdi[,c(1,290)], c("state" = "State"))
+colnames(pred_data_df) <- c("state", "candidate_name","avg_poll","party", "period", "incumbent_party","gdp", "rdi_q2")
+
+pred_data_df <- pred_data_df %>% left_join(vep_df %>% filter(year == 2016), by = c("state"="state"))
+
+# make state predictions and label them
+trump_df <- pred_data_df %>% filter(incumbent_party == TRUE)
+biden_df <- pred_data_df %>% filter(incumbent_party == FALSE)
+
+pred_prob_trump <- as.data.frame(predict(inc_log_demo, newdata = trump_df, type = "response", se.fit = TRUE))
+pred_prob_trump$state <- trump_df$state
+pred_prob_trump <- as.data.frame(pred_prob_trump)
+pred_prob_trump <- pred_prob_trump %>% mutate(var = se.fit^2)
+
+pred_prob_biden <- as.data.frame(predict(chl_log_demo, newdata = biden_df, type = "response", se.fit = TRUE))
+pred_prob_biden$state <- biden_df$state
+pred_prob_biden <- as.data.frame(pred_prob_biden)
+pred_prob_biden <- pred_prob_biden %>% mutate(var = se.fit^2)
+
+estBetaParams <- function(mu, var) {
+  alpha <- ((1 - mu) / var - 1 / mu) * mu ^ 2
+  beta <- alpha * (1 / mu - 1)
+  return(params = list(alpha = alpha, beta = beta))
+}
+
+beta_vals_trump <- estBetaParams(pred_prob_trump$fit, pred_prob_trump$var)
+beta_vals_trump <- do.call(cbind.data.frame, beta_vals_trump)
+beta_vals_trump$state <- pred_prob_trump$state
+pred_prob_trump <- pred_prob_trump %>% left_join(beta_vals_trump, by = c("state" = "state"))
+
+beta_vals_biden <- estBetaParams(pred_prob_biden$fit, pred_prob_biden$var)
+beta_vals_biden <- do.call(cbind.data.frame, beta_vals_biden)
+beta_vals_biden$state <- pred_prob_biden$state
+pred_prob_biden <- pred_prob_biden %>% left_join(beta_vals_biden, by = c("state" = "state"))
+
+sim_df <- pred_prob_trump %>% left_join(pred_prob_biden, by = c("state"= "state")) %>% 
+  left_join(elec_col[ , colSums(is.na(elec_col)) == 0], by = c("state" = "State")) %>% left_join(vep_df %>% filter(year == 2016),
+                                                                                                 by = c("state"="state"))
+
+colnames(sim_df) <- c("trump_p", "t_se","res_t","state","t_v","alpha_trump","beta_trump", "biden_p", "b_se","res_b","b_v","alpha_biden","beta_biden", "year", "EC", "temp", "VEP", "VAP")
+sim_df <- sim_df %>% select(state, trump_p, biden_p,alpha_trump, beta_trump, alpha_biden, beta_biden, EC, VEP)
+sim_df <- sim_df %>% mutate_at(vars(VEP), funs(round(.)))
+
+vep_std <- vep_df %>%
+  group_by(state) %>% 
+  summarise(vep_sd = sd(VEP)) 
+
+sim_df <- sim_df %>% left_join(vep_std, by = c("state" = "state"))
+
+
+results_df <- data.frame(state = character(0), trump_v = numeric(0), 
+                         biden_v = numeric(0), EC = numeric(0)  , sim = numeric(0))
+
+set.seed(1234)
+count = 10000
+for(st in sim_df$state){
+  temp_df <- sim_df %>% filter(state == st)
+  turnout <- round(rnorm(count, temp_df$VEP, 1.5*temp_df$vep_sd))
+  trump_vote <- rbinom(n=count, size = round(rnorm(count, turnout, temp_df$vep_sd)), prob = rbeta(count, temp_df$alpha_trump, temp_df$beta_trump))
+  biden_vote <- rbinom(n=count, size = round(rnorm(count, turnout, temp_df$vep_sd)), prob = rbeta(count, temp_df$alpha_biden, temp_df$beta_biden))
+  
+  res_st <- cbind.data.frame(st, trump_vote, biden_vote, rep(temp_df$EC, count), seq(from = 1, to = count, by = 1))
+  colnames(res_st) = c("state", "trump_v", "biden_v", "EC","sim")
+  
+  results_df <- rbind(results_df, res_st)
+}
+
+results_df <- results_df %>% mutate(win = case_when(trump_v > biden_v ~ "Trump",
+                                                    trump_v < biden_v ~ "Biden"))
+
+results_df <- na.omit(results_df)
+
+ec_results <- aggregate(results_df$EC, results_df %>% select(win, sim), FUN = sum)
+biden_votes <- aggregate(results_df$biden_v, results_df %>% select(sim), FUN = sum)
+trump_votes <- aggregate(results_df$trump_v, results_df %>% select(sim), FUN = sum)
+
+ec_wins <- ec_results %>% spread(win, x) %>% mutate(winner = case_when(Biden > Trump ~ "Biden", 
+                                                                       Trump > Biden ~ "Trump", 
+                                                                       Biden == Trump ~ "Tie"))
+
+victors <- ec_wins %>% group_by(winner) %>% count()
+
+
+```
+
+```{r echo = FALSE, return = FALSE, warning = FALSE, message = FALSE}
+ggplot(ec_results, aes(x = x, group = win, fill = win), alpha = 0.5 ) + 
+  geom_histogram(bins = 300) + 
+  labs(x="Electoral College Results", y="Frequency", color = "Legend") + ggtitle("Predicted Electoral College Results") + 
+  scale_fill_manual(values=c("dodgerblue2","firebrick1")) + 
+   theme(panel.grid.major = element_blank(), 
+          panel.grid.minor = element_blank(),
+          panel.background = element_blank(), 
+          axis.line = element_line(colour = "grey"),
+          legend.key = element_rect(fill="transparent", colour=NA))+
+  scale_color_manual(values=c("deepskyblue","firebrick")) + 
+  labs(title = "Electoral College Results from 10000 Simulations", 
+       fill = "Electoral College Total")
+
+
+```
+
+For the current election, Biden clearly has a commanding lead. There is very, very little overlap. In all, Joe Biden wins `r victors[1,2]` out the 10,000 simulations, while Trump wins in none of them. The electoral college results in a tie the remaining `r victors[2,2]` times[^6]. Biden wins an average of `r round(mean(ec_wins$Biden), digits = 2)` electoral votes, while Trump wins an average of `r round(mean(ec_wins$Trump), digits = 2)`. 
+
+## Reflections Before the Final Prediction
+All in all, it seems like Joe Biden has a very, very good chance to end up the winner of the electoral college. With such a large and stable lead in the polls, Trump would need a large polling error and likely some extraordinary events in the next 10 days to pull off a victory. 
+
+In terms of the model, there are a few things I would like to add for the final prediction. First, demographic data, for two reasons. One, demographic data tends to be a good substitute for party, as particular groups have tended to vote for particular parties over the last 50 years or so. Secondly, it helps add correlation between state outcomes. This is key: if Biden happens to win Pennsylvannia, it tells us he is more likley to win Wisconsin, because the people in the two states are relatively similar. The second thing I would like to add is correlation between states in terms of voter turnout, for similar reasons. If lots of people turn out to vote in Wisconsin, it is likely that lots of people have turned out to vote in Michigan as well. This might mean drawing turnout from a multinomial distribution, based on demographic or COVID based correlation[^7]. Finally, adding some sort of term to account for uniform swing would be nice, as it gives yet another way for results  between states to be correlated with one another. 
+
+
+[^1]: See [this post](incumbency.html) for more details. 
+
+[^2]: This polling average takes the mean of state level polls over the past two weeks. Data for 2020 comes from [FiveThirtyEight's polling average](https://projects.fivethirtyeight.com/2020-election-forecast/). 
+
+[^3]: This data comes from the [Bureau of Economic Analysis](https://www.bea.gov/data/gdp/gross-domestic-product).  
+
+[^4]: Uniform swing would be using lagged election results of some kind. The idea is that the best predictor of an election somewhere is the last election that happened there. This could take the form of vote share, which party won, or how many times in a  row a state has voted for a particular party. 
+[^5]: The binomial/logistic model I have been using is a generalized linear model, so the same ideas apply. 
+
+[^6]: This is when absolute chaos occurs. 
+
+[^7]: States that are similar in terms of COVID outcomes, or in terms of demographics will have similar turnout. 
+
