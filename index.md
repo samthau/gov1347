@@ -18,11 +18,11 @@ Examination of a binomial model, and thinking about some alternate models that m
 # [6. Empirical Bayes](Posts/prob2.html)
 Examination of a beta-binomial model, estimated using hierarchical empirical Bayes. 
 
-# [6. Parties and Uncertainty](Posts/polarization.html)
+# [7. Parties and Uncertainty](Posts/polarization.html)
 An examination of the predictive power of different two sided models over time. In addition, I take yet another crack at a probabilistic model, this time with some success in introducing variance. 
 
 
 # [Appendix](Posts/appendix.html)
-A running log of content that does not quite fit into the blog. If updated to go along with a post, a note will be made in the corresponding blog post. Last updated for [6. Parties and Uncertainty](Posts/polarization.html). 
+A running log of content that does not quite fit into the blog. If updated to go along with a post, a note will be made in the corresponding blog post. Last updated for [7. Parties and Uncertainty](Posts/polarization.html). 
 
  
