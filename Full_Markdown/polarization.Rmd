@@ -176,7 +176,7 @@ Now, does this make sense? Think in the very short-term: does it make sense to t
 As an addition to these baseline modles, I also added a control for the opposite factor. In the incumbent/challenger model, this is an indicator for party, and in the party model, this is an indicator for party incumbency status. 
 
 ## In and Out of Sample Fits
-We can first look at the regression results to think about in sample fit. We can first look at the two sided model based on incumbency, starting with the incumbenct party side:
+We can first look at the regression results to think about in sample fit. The full outputs for all four regressions are detailed in the [appendix](appendix.html). In incumbency based models, one thing to note is that the coefficient on party is highly significant, suggesting that it a worthwhile addition to the  model. In the party based model, the coefficient on incumbency status is significant as well. We can also look at the deviances to get an overall sense of fit. 
 
 ```{css, echo=FALSE}
 .scroll-100 {
@@ -186,29 +186,20 @@ We can first look at the regression results to think about in sample fit. We can
 }
 ```
 
-```{r, echo=FALSE,  warning = FALSE, message = FALSE, class.output="scroll-100" }
-summary(inc_log_cont)
+```{r, echo = FALSE, return = FALSE, warning = FALSE, message = FALSE}
+model_list <- c("Incumbent", "Challenger", "Democrat", "Republican")
+red_dev <- c(inc_log_cont$deviance, chl_log_cont$deviance, dem_log_cont$deviance, rep_log_cont$deviance)
+null_dev <- c(inc_log_cont$null.deviance, chl_log_cont$null.deviance, dem_log_cont$null.deviance, rep_log_cont$null.deviance)
+
+dev_df <- cbind.data.frame(model_list, null_dev, red_dev)
+colnames(dev_df) <- c("Model", "Null Deviance", "Residual Deviance") 
+
+library(kableExtra)
+kbl(dev_df)  %>% kable_paper(full_width = F) %>% kable_styling(position = "center")
+
 ```
 
-Then, compare to the challenger party side:
-
-```{r, echo=FALSE,  warning = FALSE, message = FALSE, class.output="scroll-100" }
-summary(chl_log_cont)
-```
-
-There are a few things to note when comparing these results to previous iterations. First, the coeffiicent on the party is statistically significant, suggesting that this was a smart addition to the model. Second, the deviances are still quite high. For both the incumbent and challenger, the null deviance is an order of magnitude larger than the residual deviance, which is a good sign, but the residual deviance is still extremely large. This suggests an all together mediocre fit, meaning that improvements should be made for next week's final model. We can also look at the two sided model based on a Republican and Democrat split. First, look at the Republican side:
-
-```{r, echo=FALSE,  warning = FALSE, message = FALSE, class.output="scroll-100" }
-summary(rep_log_cont)
-```
-
-And then also the Democrat side. 
-
-```{r, echo=FALSE,  warning = FALSE, message = FALSE, class.output="scroll-100" }
-summary(dem_log_cont)
-```
-
-We have the same results with the null deviances being an order of magnitude larger than the residual deviances, but the residual deviances still being on the order of ten to the sixth. One thing to note is that both sides of the party based model have higher residual and null deviances than the incumbency based model. While all of this gives us a general idea of in sample fit, the more interesting question is that of out of sample prediction. 
+The deviances are still quite high. For both the incumbent and challenger, the null deviance is an order of magnitude larger than the residual deviance, which is a good sign, but the residual deviance is still extremely large. The same trend holds for the party based models, but the residual deviances are still on the order of ten to the sixth. One thing to note is that both sides of the party based model have higher residual and null deviances than the incumbency based model. While all of this gives us a general idea of in sample fit, the more interesting question is that of out of sample prediction. Overall, suggests an all together mediocre fit, meaning that improvements should be made for next week's final model. We can also look at the two sided model based on a Republican and Democrat split. 
 
 To assess out of sample prediction, I conducted leave one out validation for every state and year combination going back to 1980, for which we have reliable state polling data. I then recorded the accuracy for each model in each year. Accuracy is defined as the number of states correctly predicted in a year, divided by the number of states that we make predictions about. We can look at a plot over time. 
 
@@ -372,13 +363,12 @@ wrong_party = wrong_party[!duplicated(wrong_party$States),]
 wrong_full <- wrong_inc %>% left_join(wrong_party, by = c("year" = "year"))
 colnames(wrong_full) <- c("Year", "States Incorrectly Predicted By Incumbency Model","States Incorrectly Predicted by State Model" )
 
-library(kableExtra)
 kbl(wrong_full)  %>% kable_paper(full_width = F) %>% kable_styling(position = "center")
 
 
 ```
 
-The models tend to miss similar states. In recent years, they seem to have had trouble with what we would usually call swing states, like Florida, Pennsylvannia and Wisconsin. There is no clear patter here, which suggests we are missing a host of variables. These could be demographics, or some sort of uniform swing[^4].
+The models tend to miss similar states. In recent years, they seem to have had trouble with what we would usually call swing states, like Florida, Pennsylvannia and Wisconsin. They also tend to be states that are close in the polls, demonstrating these models heavy reliance on polling data. There are two solutions: first, shifting to a probabilistic model, or adding more covariates. Aditional covariates could be demographics, or some sort of uniform swing[^4]. However, the risk of increasing the number of covariates is overfitting, so it could be that we just need different predictors, which we could get via some sort of regularization or more precise model selection.
 
 ## Uncertainty: Voting Distributions
 In the past two weeks, I have made attempts to add uncertainty into my predictions, with relatively little success. This week, I'll add two dimensions of uncertainty: one familiar, one new. To start, our base model will be the two sided incumbency model that includes a control for parties, which we just took a look at. 
@@ -386,7 +376,7 @@ In the past two weeks, I have made attempts to add uncertainty into my predictio
 Because the model is based on a binomial, we are predicting the probability that an eligible voter will vote for a particular candidate. As [discussed previously](prob1.html), a reasonable assumption to make is that not everyone votes in the same way, and instead that voting behavior comes from a [beta distribution](https://en.wikipedia.org/wiki/Beta_distribution). Unlike last week, where I used empirical Bayes to build a hierarchical model, this week I'm going to something more straightforward. 
 When a prediction is made with any type of linear model[^5], the predicted output is thought of the mean of a distribution. The associated value also has a variance, which can be calculated from the data. The trick that I am using this week is what's called the [method of moments](https://en.wikipedia.org/wiki/Method_of_moments_(statistics)): because the mean and variance of a beta distribution can be calculated from its parameters, I can set up a system of equations to solve for the parameters for a given mean and variance. 
 
-There's just one problem with this approach, that's specific to modeling the 2020 election. The variance on the predicted voting probabilites for 2020 are *tiny.* While most of the predictions on are on the order of 10 to the -1 or -2, many of the variances are on the order of 10 to the -6 or smaller. This means that if the voting probability is the only thing that has a variance, we still have an essentially deterministic model. 
+There's just one problem with this approach, that's specific to modeling the 2020 election. The variance on the predicted voting probabilites for 2020 are *tiny.* While most of the predictions on are on the order of 10 to the -1 or -2 (as they are values between 0 and 1), many of the variances are on the order of 10 to the -6. This means that if the voting probability is the only thing that has a variance, we still have an essentially deterministic model. 
 
 ## Uncertainty: Turnout
 One of the big stories of the 2020 election is COVID-19, both on the campgain trail and for forecasting the election. Thinking about how to model COVID is hard, because there are so many dimensions it might impact, some of which are harder to account for than others. Theoretically, I already account for people changing their vote because of COVID by including polling data. 
@@ -533,12 +523,14 @@ ec_wins <- ec_results %>% spread(win, x) %>% mutate(winner = case_when(Biden > T
 
 victors <- ec_wins %>% group_by(winner) %>% count()
 
+pop_results <- biden_votes %>% left_join(trump_votes, by  =  ("sim" = "sim")) %>% mutate(biden_pv = x.x/(x.x+x.y), trump_pv = x.y/(x.x+x.y)) %>% mutate(winner = case_when(biden_pv > trump_pv ~ "Biden", trump_pv > biden_pv ~ "Trump"))
+
 
 ```
 
 ```{r echo = FALSE, return = FALSE, warning = FALSE, message = FALSE}
 ggplot(ec_results, aes(x = x, group = win, fill = win), alpha = 0.5 ) + 
-  geom_histogram(bins = 300) + 
+  geom_histogram(bins = max(ec_results$x) - min(ec_results$x)) + 
   labs(x="Electoral College Results", y="Frequency", color = "Legend") + ggtitle("Predicted Electoral College Results") + 
   scale_fill_manual(values=c("dodgerblue2","firebrick1")) + 
    theme(panel.grid.major = element_blank(), 
@@ -553,12 +545,13 @@ ggplot(ec_results, aes(x = x, group = win, fill = win), alpha = 0.5 ) +
 
 ```
 
-For the current election, Biden clearly has a commanding lead. There is very, very little overlap. In all, Joe Biden wins `r victors[1,2]` out the 10,000 simulations, while Trump wins in none of them. The electoral college results in a tie the remaining `r victors[2,2]` times[^6]. Biden wins an average of `r round(mean(ec_wins$Biden), digits = 2)` electoral votes, while Trump wins an average of `r round(mean(ec_wins$Trump), digits = 2)`. 
+For the current election, Biden clearly has a commanding lead. There is very, very little overlap. In all, Joe Biden wins `r victors[1,2]` out the 10,000 simulations, while Trump wins `r victors[2,2]`. Biden wins an average of `r round(mean(ec_wins$Biden), digits = 2)` electoral votes, while Trump wins an average of `r round(mean(ec_wins$Trump), digits = 2)`. This blowout prediction comes from the model being heavily reliant on the polling averages, which with small variances, give Biden a massive lead. In terms of the popular vote, Biden wins an average of `r round(100*mean(pop_results$biden_pv), digits = 2)` percent of the two party vote, while Trump wins `r round(100*mean(pop_results$trump_pv), digits = 2)` percent of the two party vote, consistent with the landslide victory for Biden.
+
 
 ## Reflections Before the Final Prediction
 All in all, it seems like Joe Biden has a very, very good chance to end up the winner of the electoral college. With such a large and stable lead in the polls, Trump would need a large polling error and likely some extraordinary events in the next 10 days to pull off a victory. 
 
-In terms of the model, there are a few things I would like to add for the final prediction. First, demographic data, for two reasons. One, demographic data tends to be a good substitute for party, as particular groups have tended to vote for particular parties over the last 50 years or so. Secondly, it helps add correlation between state outcomes. This is key: if Biden happens to win Pennsylvannia, it tells us he is more likley to win Wisconsin, because the people in the two states are relatively similar. The second thing I would like to add is correlation between states in terms of voter turnout, for similar reasons. If lots of people turn out to vote in Wisconsin, it is likely that lots of people have turned out to vote in Michigan as well. This might mean drawing turnout from a multinomial distribution, based on demographic or COVID based correlation[^7]. Finally, adding some sort of term to account for uniform swing would be nice, as it gives yet another way for results  between states to be correlated with one another. 
+In terms of the model, there are a few things I would like to add for the final prediction. First, demographic data, for two reasons. One, demographic data tends to be a good substitute for party, as particular groups have tended to vote for particular parties over the last 50 years or so. Secondly, it helps add correlation between state outcomes. This is key: if Biden happens to win Pennsylvannia, it tells us he is more likley to win Wisconsin, because the people in the two states are relatively similar. The second thing I would like to add is correlation between states in terms of voter turnout, for similar reasons. If lots of people turn out to vote in Wisconsin, it is likely that lots of people have turned out to vote in Michigan as well. This might mean drawing turnout from a multinomial distribution, based on demographic or COVID based correlation[^6]. Finally, adding some sort of term to account for uniform swing would be nice, as it gives yet another way for results  between states to be correlated with one another. 
 
 
 [^1]: See [this post](incumbency.html) for more details. 
@@ -570,7 +563,5 @@ In terms of the model, there are a few things I would like to add for the final 
 [^4]: Uniform swing would be using lagged election results of some kind. The idea is that the best predictor of an election somewhere is the last election that happened there. This could take the form of vote share, which party won, or how many times in a  row a state has voted for a particular party. 
 [^5]: The binomial/logistic model I have been using is a generalized linear model, so the same ideas apply. 
 
-[^6]: This is when absolute chaos occurs. 
-
-[^7]: States that are similar in terms of COVID outcomes, or in terms of demographics will have similar turnout. 
+[^6]: States that are similar in terms of COVID outcomes, or in terms of demographics will have similar turnout. 
 

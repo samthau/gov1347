@@ -143,6 +143,12 @@ summary(rep_log_base)
 summary(dem_log_cont)
 summary(rep_log_cont)
 
+model_list <- c("Incumbent", "Challenger", "Democrat", "Republican")
+red_dev <- c(inc_log_cont$deviance, chl_log_cont$deviance, dem_log_cont$deviance, rep_log_cont$deviance)
+null_dev <- c(inc_log_cont$null.deviance, chl_log_cont$null.deviance, dem_log_cont$null.deviance, rep_log_cont$null.deviance)
+
+dev_df <- cbind.data.frame(model_list, null_dev, red_dev)
+colnames(dev_df) <- c("Model", "Null Deviance", "Residual Deviance") 
 
 check_out <- function(year, state){
   #check
@@ -234,6 +240,8 @@ for(j in seq(from = 1, to = 10, by =1)){
     outsamp_df <- rbind(outsamp_df, temp)
   }
 }
+
+
 
 rownames(outsamp_df) <- NULL
 outsamp_df <- outsamp_df %>% row_to_names(row_number=1)

@@ -154,7 +154,7 @@ Then, we can also look at the results for the challengers:
 
 
 ## [5. Probabilistic Models](polls1.html)
-```{r prob1, echo=FALSE,  warning = FALSE, message = FALSE }
+```{r , echo=FALSE,  warning = FALSE, message = FALSE }
 rm(list = ls())
 set.seed(1234)
 
@@ -264,14 +264,190 @@ The logistic regression is of the following form:
 $$ (Votes | VEP)= f(\beta_0 + \beta_1 RDI + \beta_2 GDP + \beta_3 Poll + \beta_4 Period +\beta_5 State)$$
 Where $f(x)=\frac{exp(x)}{1+exp(x)}$. In addition, VEP is the eligible voting popluation, RDI is the second quarter RDI in a particular state, GDP is the national second quarter GDP, poll is the average vote share up to 4 weeks before the election, period is an indicator for 1980-1992 or 1996 onward, and state is a set of dummy variables for states. We can exmaine the output for both the incumbent party:
 
-```{r prob1_inc, echo=FALSE,  warning = FALSE, message = FALSE, class.output="scroll-100" }
+```{r , echo=FALSE,  warning = FALSE, message = FALSE, class.output="scroll-100" }
  summary(inc_log)
 ```
 
 And also the challenger party.
 
-```{r prob1_chl, echo=FALSE,  warning = FALSE, message = FALSE, class.output="scroll-100" }
+```{r , echo=FALSE,  warning = FALSE, message = FALSE, class.output="scroll-100" }
  summary(chl_log)
 ```
 
 The deviances (one way of measuring the fit of a logistic regression) are extremely high, suggesting a poor fit. In addition to the problems with a [lack of variance](polls1.html), it would seem that this model may not be particularly helpful. 
+
+## [7. Parties and Uncertainty](polarization.html)
+In the post on parties and uncertainty, I used a number of logistic models based on two different types of two sided model: one based on incumbency status, and one based on parties. The results of those regressions are as follows. 
+
+```{r , echo=FALSE,  warning = FALSE, message = FALSE }
+##libraries
+library(tidyverse)
+library(ggplot2)
+library(usmap)
+library(janitor)
+library(usmap)
+library(data.table)
+library(geofacet) ## map-shaped grid of ggplots
+library(stargazer)
+
+
+# read in all data
+nat_popvote_df <- read_csv("../Data/popvote_1948-2016.csv")
+nat_poll_df    <- read_csv("../Data/pollavg_1968-2016.csv")
+
+state_popvote_df <- read_csv("../Data/popvote_bystate_1948-2016.csv")
+state_poll_df <- read_csv("../Data/pollavg_bystate_1968-2016.csv")
+
+nat_econ <- read_csv("../Data/econ.csv")
+state_rdi <- read_csv("../Data/state_rdi.csv")
+
+vep_df <- read_csv("../Data/vep_1980-2016.csv")
+
+# clean data
+#build state df with econ, polls, and 
+weeks <- 1
+poll_df <- state_poll_df %>% filter(weeks_left >= weeks, weeks_left<5) %>% 
+  select(year, state, party, candidate_name, avg_poll) %>% 
+  group_by(year, state, candidate_name, party) %>%
+  summarize(avg_poll = mean(avg_poll))
+
+#build economic df at state level from rdi and national gdp
+econ_df <- state_rdi[,1:2]
+colnames(econ_df) <- c("state","rdi_q2")
+econ_df$rdi_q2 <- as.numeric(econ_df$rdi_q2)
+
+for(i in seq(from = 18, to = 290, by = 16)){
+  temp <- state_rdi[,c(1,i)]
+  colnames(temp) <- c("state","rdi_q2")
+  temp$rdi_q2 <- as.numeric(temp$rdi_q2)
+  econ_df <- rbind(econ_df, temp)
+}
+
+#add years and national gdp growth
+year_list <- seq(from = 1948, to = 2020, by=4)
+year_append <- rep(year_list[1],51)
+nat_econ_sub <- nat_econ %>% filter(year %in% year_list, quarter == 2) %>% 
+  select(year, GDP_growth_qt)
+gdp_append <- as.numeric(rep(nat_econ_sub[1,2],51))
+
+for(i in seq(from = 2, to=length(year_list), by =1)){
+  new_year = rep(year_list[i], 51)
+  new_gdp = as.numeric(rep(nat_econ_sub[i,2], 51))
+  year_append = append(year_append, new_year)
+  gdp_append = append(gdp_append, new_gdp)
+}
+
+#append year and national gdp to the econ df
+econ_df$year <- year_append
+econ_df$gdp <- gdp_append
+
+
+## Merge datasets and clean
+pol_data <- nat_popvote_df %>% select("year","party","winner", "incumbent","incumbent_party")
+
+reg_df <- poll_df %>% left_join(econ_df, by=c("state"="state","year"="year")) %>% 
+  left_join(state_popvote_df, by= c("state"="state", "year"="year")) %>%
+  left_join(pol_data, 
+            by  = c("year"="year","party" = "party" ))
+
+
+reg_df <- reg_df %>% 
+  mutate(inc_party = case_when((party=="democrat" & incumbent_party==TRUE) ~ "democrat", 
+                               (party=="democrat" & incumbent_party==FALSE) ~ "republican",
+                               (party=="republican" & incumbent_party==TRUE) ~ "republican",
+                               (party=="republican" & incumbent_party==FALSE) ~ "democrat")) %>%
+  mutate(chl_party = case_when((party=="democrat" & incumbent_party==FALSE) ~ "democrat", 
+                               (party=="democrat" & incumbent_party==TRUE) ~ "republican",
+                               (party=="republican" & incumbent_party==FALSE) ~ "republican",
+                               (party=="republican" & incumbent_party==TRUE) ~ "democrat"))
+
+reg_df <- reg_df %>% 
+  mutate(inc_pv = case_when((inc_party=="republican") ~ R_pv2p, 
+                            (inc_party=="democrat") ~ D_pv2p)) %>% 
+  mutate(chl_pv = case_when(chl_party == "democrat" ~ D_pv2p, 
+                            chl_party == "republican" ~ R_pv2p))
+
+reg_df <- reg_df %>% mutate(incumbent_win = case_when(inc_party == "republican" & R_pv2p > D_pv2p ~ 1,
+                                                      inc_party == "republican" & R_pv2p < D_pv2p ~ 0, 
+                                                      inc_party == "democrat" & R_pv2p < D_pv2p ~ 1,
+                                                      inc_party == "democrat" & R_pv2p > D_pv2p ~ 0))
+
+reg_df <- reg_df %>% 
+  mutate(inc_votes = case_when((inc_party=="republican") ~ R, 
+                            (inc_party=="democrat") ~ D)) %>% 
+  mutate(chl_votes = case_when(chl_party == "democrat" ~ D, 
+                            chl_party == "republican" ~ R))
+reg_df <- reg_df %>% left_join(vep_df, by = c("state" = "state", "year" = "year"))
+
+reg_df <- na.omit(reg_df)
+
+reg_df <- reg_df %>% mutate_at(vars(VEP), funs(round(.)))
+
+## do regressions for in sample fit
+inc_log_base <- glm(cbind(inc_votes, VEP-inc_votes) ~ rdi_q2 + gdp + state + avg_poll, 
+               data = reg_df %>% filter(year < 2020, incumbent_party == TRUE), family=binomial)
+
+chl_log_base <- glm(cbind(chl_votes, VEP-chl_votes) ~ rdi_q2 + gdp + state + avg_poll, 
+               data = reg_df %>% filter(year < 2020, incumbent_party == FALSE), family=binomial)
+
+inc_log_cont <- glm(cbind(inc_votes, VEP-inc_votes) ~ rdi_q2 + gdp + state + avg_poll+ inc_party, 
+                    data = reg_df %>% filter(year < 2020, incumbent_party == TRUE), family=binomial)
+
+chl_log_cont <- glm(cbind(chl_votes, VEP-chl_votes) ~ rdi_q2 + gdp + state + avg_poll + inc_party, 
+                    data = reg_df %>% filter(year < 2020, incumbent_party == FALSE), family=binomial)
+
+## summaries of models
+# summary(inc_log_base)
+# summary(chl_log_base)
+# summary(inc_log_cont)
+# summary(chl_log_cont)
+
+
+##
+## do regressions for in sample fit
+dem_log_base <- glm(cbind(D, VEP-D) ~ rdi_q2 + gdp + state + avg_poll, 
+                    data = reg_df %>% filter(year < 2020, party == "democrat"), family=binomial)
+
+rep_log_base <- glm(cbind(R, VEP-R) ~ rdi_q2 + gdp + state + avg_poll, 
+                    data = reg_df %>% filter(year < 2020, party == "republican"), family=binomial)
+
+dem_log_cont <- glm(cbind(D, VEP-D) ~ rdi_q2 + gdp + state + avg_poll+ incumbent_party, 
+                    data = reg_df %>% filter(year < 2020, party == "democrat"), family=binomial)
+
+rep_log_cont <- glm(cbind(R, VEP-R) ~ rdi_q2 + gdp + state + avg_poll + incumbent_party, 
+                    data = reg_df %>% filter(year < 2020, party == "republican"), family=binomial)
+
+## summaries of models
+# summary(dem_log_base)
+# summary(rep_log_base)
+# summary(dem_log_cont)
+# summary(rep_log_cont)
+
+
+```
+
+First look at the model for the incumbent party. 
+
+```{r , echo=FALSE,  warning = FALSE, message = FALSE, class.output="scroll-100" }
+ summary(inc_log_cont)
+```
+
+Then the challenger party. 
+```{r , echo=FALSE,  warning = FALSE, message = FALSE, class.output="scroll-100" }
+ summary(chl_log_cont)
+```
+
+We can then switch over to the party based model. First look at the Democrat side. 
+
+```{r , echo=FALSE,  warning = FALSE, message = FALSE, class.output="scroll-100" }
+ summary(dem_log_cont)
+```
+
+Then, finally, we can look at the Republcan side. 
+
+```{r prob1_chl, echo=FALSE,  warning = FALSE, message = FALSE, class.output="scroll-100" }
+ summary(rep_log_cont)
+```
+
+
+

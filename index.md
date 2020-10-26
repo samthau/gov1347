@@ -23,6 +23,6 @@ An examination of the predictive power of different two sided models over time. 
 
 
 # [Appendix](Posts/appendix.html)
-A running log of content that does not quite fit into the blog. If updated to go along with a post, a note will be made in the corresponding blog post. Last updated for [5. Probabilistic Models](Posts/prob1.html). 
+A running log of content that does not quite fit into the blog. If updated to go along with a post, a note will be made in the corresponding blog post. Last updated for [7. Parties and Uncertainty](Posts/polarization.html). 
 
  

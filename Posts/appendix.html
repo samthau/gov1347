@@ -854,6 +854,322 @@ summary {
 ## Number of Fisher Scoring iterations: 4</code></pre>
 <p>The deviances (one way of measuring the fit of a logistic regression) are extremely high, suggesting a poor fit. In addition to the problems with a <a href="polls1.html">lack of variance</a>, it would seem that this model may not be particularly helpful.</p>
 </div>
+<div id="parties-and-uncertainty" class="section level2">
+<h2><a href="polarization.html">7. Parties and Uncertainty</a></h2>
+<p>In the post on parties and uncertainty, I used a number of logistic models based on two different types of two sided model: one based on incumbency status, and one based on parties. The results of those regressions are as follows.</p>
+<p>First look at the model for the incumbent party.</p>
+<pre class="scroll-100"><code>## 
+## Call:
+## glm(formula = cbind(inc_votes, VEP - inc_votes) ~ rdi_q2 + gdp + 
+##     state + avg_poll + inc_party, family = binomial, data = reg_df %&gt;% 
+##     filter(year &lt; 2020, incumbent_party == TRUE))
+## 
+## Deviance Residuals: 
+##     Min       1Q   Median       3Q      Max  
+## -369.04   -52.43    -0.22    48.95   312.11  
+## 
+## Coefficients:
+##                             Estimate Std. Error   z value Pr(&gt;|z|)    
+## (Intercept)               -2.392e+00  5.685e-04 -4208.439   &lt;2e-16 ***
+## rdi_q2                    -4.422e-03  1.560e-05  -283.551   &lt;2e-16 ***
+## gdp                       -4.568e-02  6.087e-05  -750.468   &lt;2e-16 ***
+## stateAlaska                1.817e-01  1.592e-03   114.153   &lt;2e-16 ***
+## stateArizona              -4.761e-02  6.213e-04   -76.634   &lt;2e-16 ***
+## stateArkansas             -5.901e-02  7.519e-04   -78.479   &lt;2e-16 ***
+## stateCalifornia            6.092e-02  4.805e-04   126.795   &lt;2e-16 ***
+## stateColorado              2.501e-01  6.360e-04   393.229   &lt;2e-16 ***
+## stateConnecticut           2.436e-01  6.727e-04   362.098   &lt;2e-16 ***
+## stateDelaware              1.645e-01  1.296e-03   126.903   &lt;2e-16 ***
+## stateDistrict of Columbia -5.125e-02  2.093e-03   -24.484   &lt;2e-16 ***
+## stateFlorida               8.956e-02  5.005e-04   178.945   &lt;2e-16 ***
+## stateGeorgia              -5.291e-02  5.578e-04   -94.853   &lt;2e-16 ***
+## stateHawaii               -1.805e-01  1.064e-03  -169.675   &lt;2e-16 ***
+## stateIdaho                 1.088e-01  1.070e-03   101.640   &lt;2e-16 ***
+## stateIllinois              1.296e-01  5.147e-04   251.855   &lt;2e-16 ***
+## stateIndiana               9.431e-04  6.150e-04     1.533    0.125    
+## stateIowa                  2.604e-01  6.963e-04   373.987   &lt;2e-16 ***
+## stateKansas                7.583e-02  8.162e-04    92.902   &lt;2e-16 ***
+## stateKentucky              6.807e-03  6.754e-04    10.079   &lt;2e-16 ***
+## stateLouisiana             1.701e-01  6.191e-04   274.755   &lt;2e-16 ***
+## stateMaine                 3.463e-01  8.990e-04   385.154   &lt;2e-16 ***
+## stateMaryland              1.129e-01  6.101e-04   184.994   &lt;2e-16 ***
+## stateMassachusetts         2.352e-01  5.666e-04   415.022   &lt;2e-16 ***
+## stateMichigan              2.412e-01  5.329e-04   452.584   &lt;2e-16 ***
+## stateMinnesota             4.177e-01  5.911e-04   706.596   &lt;2e-16 ***
+## stateMississippi           2.015e-02  7.710e-04    26.134   &lt;2e-16 ***
+## stateMissouri              1.590e-01  5.835e-04   272.489   &lt;2e-16 ***
+## stateMontana               1.805e-01  1.062e-03   169.926   &lt;2e-16 ***
+## stateNebraska              9.429e-02  9.284e-04   101.560   &lt;2e-16 ***
+## stateNevada               -3.081e-02  8.557e-04   -36.000   &lt;2e-16 ***
+## stateNew Hampshire         2.660e-01  9.301e-04   286.023   &lt;2e-16 ***
+## stateNew Jersey            2.120e-01  5.391e-04   393.272   &lt;2e-16 ***
+## stateNew Mexico           -1.558e-02  8.536e-04   -18.252   &lt;2e-16 ***
+## stateNew York             -3.981e-02  4.984e-04   -79.882   &lt;2e-16 ***
+## stateNorth Carolina        8.231e-03  5.428e-04    15.164   &lt;2e-16 ***
+## stateNorth Dakota          1.654e-01  1.224e-03   135.135   &lt;2e-16 ***
+## stateOhio                  1.523e-01  5.148e-04   295.923   &lt;2e-16 ***
+## stateOklahoma             -8.237e-02  6.748e-04  -122.077   &lt;2e-16 ***
+## stateOregon                2.543e-01  6.385e-04   398.254   &lt;2e-16 ***
+## statePennsylvania          5.285e-02  5.121e-04   103.196   &lt;2e-16 ***
+## stateRhode Island          1.791e-01  1.060e-03   169.013   &lt;2e-16 ***
+## stateSouth Carolina       -1.377e-01  6.681e-04  -206.171   &lt;2e-16 ***
+## stateSouth Dakota          1.893e-01  1.173e-03   161.414   &lt;2e-16 ***
+## stateTennessee            -1.152e-01  5.927e-04  -194.379   &lt;2e-16 ***
+## stateTexas                -7.280e-02  5.019e-04  -145.049   &lt;2e-16 ***
+## stateUtah                 -1.814e-02  8.183e-04   -22.172   &lt;2e-16 ***
+## stateVermont               2.036e-01  1.542e-03   132.010   &lt;2e-16 ***
+## stateVirginia              1.255e-01  5.604e-04   223.991   &lt;2e-16 ***
+## stateWashington            1.976e-01  5.725e-04   345.254   &lt;2e-16 ***
+## stateWest Virginia        -7.691e-02  8.403e-04   -91.533   &lt;2e-16 ***
+## stateWisconsin             3.203e-01  5.719e-04   560.079   &lt;2e-16 ***
+## stateWyoming               9.533e-02  1.767e-03    53.944   &lt;2e-16 ***
+## avg_poll                   3.089e-02  7.391e-06  4179.078   &lt;2e-16 ***
+## inc_partyrepublican        5.601e-02  1.242e-04   451.048   &lt;2e-16 ***
+## ---
+## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+## 
+## (Dispersion parameter for binomial family taken to be 1)
+## 
+##     Null deviance: 27672541  on 413  degrees of freedom
+## Residual deviance:  3800967  on 359  degrees of freedom
+## AIC: 3807296
+## 
+## Number of Fisher Scoring iterations: 3</code></pre>
+<p>Then the challenger party.</p>
+<pre class="scroll-100"><code>## 
+## Call:
+## glm(formula = cbind(chl_votes, VEP - chl_votes) ~ rdi_q2 + gdp + 
+##     state + avg_poll + inc_party, family = binomial, data = reg_df %&gt;% 
+##     filter(year &lt; 2020, incumbent_party == FALSE))
+## 
+## Deviance Residuals: 
+##     Min       1Q   Median       3Q      Max  
+## -330.57   -46.35    -0.51    53.51   349.15  
+## 
+## Coefficients:
+##                             Estimate Std. Error   z value Pr(&gt;|z|)    
+## (Intercept)               -2.463e+00  6.020e-04 -4091.495  &lt; 2e-16 ***
+## rdi_q2                    -3.275e-03  1.594e-05  -205.421  &lt; 2e-16 ***
+## gdp                       -7.400e-02  5.643e-05 -1311.230  &lt; 2e-16 ***
+## stateAlaska                1.764e-01  1.623e-03   108.704  &lt; 2e-16 ***
+## stateArizona               2.237e-03  6.264e-04     3.571 0.000356 ***
+## stateArkansas             -8.230e-02  7.487e-04  -109.925  &lt; 2e-16 ***
+## stateCalifornia            6.101e-02  4.885e-04   124.895  &lt; 2e-16 ***
+## stateColorado              2.463e-01  6.359e-04   387.288  &lt; 2e-16 ***
+## stateConnecticut           2.649e-01  6.894e-04   384.238  &lt; 2e-16 ***
+## stateDelaware              2.062e-01  1.319e-03   156.302  &lt; 2e-16 ***
+## stateDistrict of Columbia -1.044e+00  5.538e-03  -188.483  &lt; 2e-16 ***
+## stateFlorida               1.304e-01  5.089e-04   256.323  &lt; 2e-16 ***
+## stateGeorgia              -1.398e-02  5.659e-04   -24.708  &lt; 2e-16 ***
+## stateHawaii               -2.001e-01  1.178e-03  -169.882  &lt; 2e-16 ***
+## stateIdaho                 2.308e-01  9.733e-04   237.108  &lt; 2e-16 ***
+## stateIllinois              1.919e-01  5.225e-04   367.276  &lt; 2e-16 ***
+## stateIndiana               7.046e-02  6.122e-04   115.095  &lt; 2e-16 ***
+## stateIowa                  3.217e-01  6.953e-04   462.725  &lt; 2e-16 ***
+## stateKansas                1.518e-01  8.095e-04   187.548  &lt; 2e-16 ***
+## stateKentucky              7.618e-02  6.838e-04   111.406  &lt; 2e-16 ***
+## stateLouisiana             1.697e-01  6.243e-04   271.849  &lt; 2e-16 ***
+## stateMaine                 4.065e-01  9.053e-04   448.966  &lt; 2e-16 ***
+## stateMaryland              1.509e-01  6.327e-04   238.529  &lt; 2e-16 ***
+## stateMassachusetts         2.444e-01  5.820e-04   419.955  &lt; 2e-16 ***
+## stateMichigan              2.495e-01  5.380e-04   463.814  &lt; 2e-16 ***
+## stateMinnesota             4.672e-01  5.985e-04   780.591  &lt; 2e-16 ***
+## stateMississippi          -2.084e-02  7.756e-04   -26.874  &lt; 2e-16 ***
+## stateMissouri              2.075e-01  5.869e-04   353.545  &lt; 2e-16 ***
+## stateMontana               3.089e-01  1.037e-03   297.999  &lt; 2e-16 ***
+## stateNebraska              1.586e-01  8.798e-04   180.208  &lt; 2e-16 ***
+## stateNevada                5.883e-03  8.618e-04     6.826 8.73e-12 ***
+## stateNew Hampshire         3.351e-01  9.244e-04   362.486  &lt; 2e-16 ***
+## stateNew Jersey            2.099e-01  5.523e-04   379.990  &lt; 2e-16 ***
+## stateNew Mexico            6.466e-02  8.677e-04    74.524  &lt; 2e-16 ***
+## stateNew York             -3.376e-02  5.084e-04   -66.410  &lt; 2e-16 ***
+## stateNorth Carolina        6.019e-02  5.504e-04   109.361  &lt; 2e-16 ***
+## stateNorth Dakota          2.537e-01  1.195e-03   212.188  &lt; 2e-16 ***
+## stateOhio                  1.801e-01  5.213e-04   345.433  &lt; 2e-16 ***
+## stateOklahoma             -2.898e-02  6.710e-04   -43.197  &lt; 2e-16 ***
+## stateOregon                2.690e-01  6.437e-04   417.858  &lt; 2e-16 ***
+## statePennsylvania          1.361e-01  5.180e-04   262.733  &lt; 2e-16 ***
+## stateRhode Island          1.619e-01  1.157e-03   139.971  &lt; 2e-16 ***
+## stateSouth Carolina       -6.435e-02  6.758e-04   -95.232  &lt; 2e-16 ***
+## stateSouth Dakota          2.863e-01  1.122e-03   255.202  &lt; 2e-16 ***
+## stateTennessee             1.649e-02  5.950e-04    27.722  &lt; 2e-16 ***
+## stateTexas                -8.607e-02  5.072e-04  -169.690  &lt; 2e-16 ***
+## stateUtah                  7.281e-02  8.247e-04    88.293  &lt; 2e-16 ***
+## stateVermont               3.074e-01  1.565e-03   196.445  &lt; 2e-16 ***
+## stateVirginia              1.289e-01  5.679e-04   227.012  &lt; 2e-16 ***
+## stateWashington            2.261e-01  5.808e-04   389.341  &lt; 2e-16 ***
+## stateWest Virginia        -3.935e-02  8.409e-04   -46.795  &lt; 2e-16 ***
+## stateWisconsin             3.999e-01  5.770e-04   692.936  &lt; 2e-16 ***
+## stateWyoming               2.124e-01  1.754e-03   121.068  &lt; 2e-16 ***
+## avg_poll                   3.249e-02  8.137e-06  3993.281  &lt; 2e-16 ***
+## inc_partyrepublican        5.443e-02  1.297e-04   419.628  &lt; 2e-16 ***
+## ---
+## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+## 
+## (Dispersion parameter for binomial family taken to be 1)
+## 
+##     Null deviance: 29524520  on 413  degrees of freedom
+## Residual deviance:  4203355  on 359  degrees of freedom
+## AIC: 4209677
+## 
+## Number of Fisher Scoring iterations: 3</code></pre>
+<p>We can then switch over to the party based model. First look at the Democrat side.</p>
+<pre class="scroll-100"><code>## 
+## Call:
+## glm(formula = cbind(D, VEP - D) ~ rdi_q2 + gdp + state + avg_poll + 
+##     incumbent_party, family = binomial, data = reg_df %&gt;% filter(year &lt; 
+##     2020, party == &quot;democrat&quot;))
+## 
+## Deviance Residuals: 
+##     Min       1Q   Median       3Q      Max  
+## -359.88   -50.52     2.92    49.17   307.24  
+## 
+## Coefficients:
+##                             Estimate Std. Error   z value Pr(&gt;|z|)    
+## (Intercept)               -2.393e+00  6.358e-04 -3763.660  &lt; 2e-16 ***
+## rdi_q2                    -3.325e-03  1.600e-05  -207.877  &lt; 2e-16 ***
+## gdp                       -4.903e-02  5.976e-05  -820.449  &lt; 2e-16 ***
+## stateAlaska                2.545e-02  1.720e-03    14.798  &lt; 2e-16 ***
+## stateArizona              -4.309e-02  6.534e-04   -65.953  &lt; 2e-16 ***
+## stateArkansas             -1.215e-01  7.843e-04  -154.956  &lt; 2e-16 ***
+## stateCalifornia            7.202e-02  5.208e-04   138.291  &lt; 2e-16 ***
+## stateColorado              2.672e-01  6.579e-04   406.217  &lt; 2e-16 ***
+## stateConnecticut           2.450e-01  6.976e-04   351.276  &lt; 2e-16 ***
+## stateDelaware              2.210e-01  1.282e-03   172.362  &lt; 2e-16 ***
+## stateDistrict of Columbia -9.515e-02  2.135e-03   -44.568  &lt; 2e-16 ***
+## stateFlorida               9.547e-02  5.341e-04   178.741  &lt; 2e-16 ***
+## stateGeorgia              -4.536e-02  5.905e-04   -76.816  &lt; 2e-16 ***
+## stateHawaii               -1.827e-01  1.066e-03  -171.439  &lt; 2e-16 ***
+## stateIdaho                 1.078e-01  1.130e-03    95.398  &lt; 2e-16 ***
+## stateIllinois              1.504e-01  5.491e-04   273.815  &lt; 2e-16 ***
+## stateIndiana               2.855e-02  6.445e-04    44.305  &lt; 2e-16 ***
+## stateIowa                  2.769e-01  7.148e-04   387.350  &lt; 2e-16 ***
+## stateKansas                5.687e-02  8.666e-04    65.628  &lt; 2e-16 ***
+## stateKentucky             -1.075e-02  7.206e-04   -14.920  &lt; 2e-16 ***
+## stateLouisiana             1.767e-01  6.493e-04   272.184  &lt; 2e-16 ***
+## stateMaine                 4.012e-01  9.022e-04   444.713  &lt; 2e-16 ***
+## stateMaryland              1.334e-01  6.409e-04   208.147  &lt; 2e-16 ***
+## stateMassachusetts         2.585e-01  6.023e-04   429.151  &lt; 2e-16 ***
+## stateMichigan              2.446e-01  5.609e-04   436.002  &lt; 2e-16 ***
+## stateMinnesota             4.268e-01  6.192e-04   689.201  &lt; 2e-16 ***
+## stateMississippi           5.689e-03  8.115e-04     7.011 2.36e-12 ***
+## stateMissouri              1.379e-01  6.123e-04   225.304  &lt; 2e-16 ***
+## stateMontana               2.369e-01  1.092e-03   217.004  &lt; 2e-16 ***
+## stateNebraska              5.294e-02  9.887e-04    53.550  &lt; 2e-16 ***
+## stateNevada                3.108e-02  8.720e-04    35.640  &lt; 2e-16 ***
+## stateNew Hampshire         2.693e-01  9.412e-04   286.155  &lt; 2e-16 ***
+## stateNew Jersey            2.076e-01  5.711e-04   363.502  &lt; 2e-16 ***
+## stateNew Mexico            2.325e-02  8.690e-04    26.761  &lt; 2e-16 ***
+## stateNew York             -1.924e-02  5.404e-04   -35.598  &lt; 2e-16 ***
+## stateNorth Carolina       -8.300e-03  5.768e-04   -14.391  &lt; 2e-16 ***
+## stateNorth Dakota          1.129e-01  1.295e-03    87.209  &lt; 2e-16 ***
+## stateOhio                  1.364e-01  5.463e-04   249.632  &lt; 2e-16 ***
+## stateOklahoma             -9.826e-02  7.273e-04  -135.100  &lt; 2e-16 ***
+## stateOregon                2.675e-01  6.603e-04   405.191  &lt; 2e-16 ***
+## statePennsylvania          8.368e-02  5.431e-04   154.087  &lt; 2e-16 ***
+## stateRhode Island          2.087e-01  1.069e-03   195.245  &lt; 2e-16 ***
+## stateSouth Carolina       -1.176e-01  7.075e-04  -166.273  &lt; 2e-16 ***
+## stateSouth Dakota          1.702e-01  1.215e-03   140.064  &lt; 2e-16 ***
+## stateTennessee            -1.306e-01  6.268e-04  -208.329  &lt; 2e-16 ***
+## stateTexas                -6.568e-02  5.335e-04  -123.124  &lt; 2e-16 ***
+## stateUtah                 -2.862e-02  9.307e-04   -30.756  &lt; 2e-16 ***
+## stateVermont               3.018e-01  1.474e-03   204.803  &lt; 2e-16 ***
+## stateVirginia              1.268e-01  5.906e-04   214.636  &lt; 2e-16 ***
+## stateWashington            2.121e-01  6.007e-04   353.020  &lt; 2e-16 ***
+## stateWest Virginia        -1.283e-01  8.710e-04  -147.319  &lt; 2e-16 ***
+## stateWisconsin             3.492e-01  5.988e-04   583.233  &lt; 2e-16 ***
+## stateWyoming               9.333e-02  1.943e-03    48.040  &lt; 2e-16 ***
+## avg_poll                   3.214e-02  9.978e-06  3220.834  &lt; 2e-16 ***
+## incumbent_partyTRUE       -6.783e-02  1.235e-04  -549.199  &lt; 2e-16 ***
+## ---
+## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+## 
+## (Dispersion parameter for binomial family taken to be 1)
+## 
+##     Null deviance: 31804157  on 413  degrees of freedom
+## Residual deviance:  4091837  on 359  degrees of freedom
+## AIC: 4098155
+## 
+## Number of Fisher Scoring iterations: 3</code></pre>
+<p>Then, finally, we can look at the Republcan side.</p>
+<pre class="scroll-100"><code>## 
+## Call:
+## glm(formula = cbind(R, VEP - R) ~ rdi_q2 + gdp + state + avg_poll + 
+##     incumbent_party, family = binomial, data = reg_df %&gt;% filter(year &lt; 
+##     2020, party == &quot;republican&quot;))
+## 
+## Deviance Residuals: 
+##     Min       1Q   Median       3Q      Max  
+## -334.18   -43.61    -2.20    46.05   340.31  
+## 
+## Coefficients:
+##                             Estimate Std. Error   z value Pr(&gt;|z|)    
+## (Intercept)               -2.228e+00  6.429e-04 -3464.880  &lt; 2e-16 ***
+## rdi_q2                    -4.348e-03  1.532e-05  -283.859  &lt; 2e-16 ***
+## gdp                       -7.009e-02  5.685e-05 -1232.845  &lt; 2e-16 ***
+## stateAlaska                2.815e-01  1.527e-03   184.356  &lt; 2e-16 ***
+## stateArizona              -2.579e-02  6.003e-04   -42.964  &lt; 2e-16 ***
+## stateArkansas             -3.967e-02  7.224e-04   -54.911  &lt; 2e-16 ***
+## stateCalifornia           -3.646e-03  4.781e-04    -7.626 2.42e-14 ***
+## stateColorado              2.015e-01  6.226e-04   323.670  &lt; 2e-16 ***
+## stateConnecticut           2.120e-01  6.807e-04   311.394  &lt; 2e-16 ***
+## stateDelaware              8.979e-02  1.352e-03    66.421  &lt; 2e-16 ***
+## stateDistrict of Columbia -1.247e+00  5.542e-03  -224.990  &lt; 2e-16 ***
+## stateFlorida               1.009e-01  4.844e-04   208.230  &lt; 2e-16 ***
+## stateGeorgia              -4.167e-02  5.402e-04   -77.142  &lt; 2e-16 ***
+## stateHawaii               -2.826e-01  1.208e-03  -233.864  &lt; 2e-16 ***
+## stateIdaho                 2.419e-01  9.352e-04   258.692  &lt; 2e-16 ***
+## stateIllinois              1.167e-01  5.158e-04   226.263  &lt; 2e-16 ***
+## stateIndiana               3.184e-02  5.868e-04    54.266  &lt; 2e-16 ***
+## stateIowa                  2.692e-01  6.874e-04   391.567  &lt; 2e-16 ***
+## stateKansas                1.513e-01  7.698e-04   196.484  &lt; 2e-16 ***
+## stateKentucky              7.480e-02  6.458e-04   115.825  &lt; 2e-16 ***
+## stateLouisiana             1.481e-01  5.980e-04   247.660  &lt; 2e-16 ***
+## stateMaine                 2.906e-01  9.204e-04   315.732  &lt; 2e-16 ***
+## stateMaryland              5.890e-02  6.346e-04    92.819  &lt; 2e-16 ***
+## stateMassachusetts         1.428e-01  5.911e-04   241.498  &lt; 2e-16 ***
+## stateMichigan              2.004e-01  5.284e-04   379.282  &lt; 2e-16 ***
+## stateMinnesota             4.103e-01  5.902e-04   695.243  &lt; 2e-16 ***
+## stateMississippi          -1.164e-02  7.396e-04   -15.735  &lt; 2e-16 ***
+## stateMissouri              2.025e-01  5.665e-04   357.409  &lt; 2e-16 ***
+## stateMontana               2.410e-01  1.010e-03   238.570  &lt; 2e-16 ***
+## stateNebraska              1.967e-01  8.400e-04   234.177  &lt; 2e-16 ***
+## stateNevada               -8.440e-02  8.530e-04   -98.940  &lt; 2e-16 ***
+## stateNew Hampshire         2.940e-01  9.220e-04   318.841  &lt; 2e-16 ***
+## stateNew Jersey            1.680e-01  5.378e-04   312.366  &lt; 2e-16 ***
+## stateNew Mexico           -1.686e-02  8.640e-04   -19.519  &lt; 2e-16 ***
+## stateNew York             -1.291e-01  5.113e-04  -252.452  &lt; 2e-16 ***
+## stateNorth Carolina        5.291e-02  5.254e-04   100.691  &lt; 2e-16 ***
+## stateNorth Dakota          2.813e-01  1.146e-03   245.523  &lt; 2e-16 ***
+## stateOhio                  1.661e-01  5.005e-04   331.901  &lt; 2e-16 ***
+## stateOklahoma             -1.063e-02  6.304e-04   -16.867  &lt; 2e-16 ***
+## stateOregon                2.104e-01  6.386e-04   329.522  &lt; 2e-16 ***
+## statePennsylvania          6.531e-02  5.031e-04   129.814  &lt; 2e-16 ***
+## stateRhode Island          4.824e-02  1.172e-03    41.173  &lt; 2e-16 ***
+## stateSouth Carolina       -1.004e-01  6.423e-04  -156.295  &lt; 2e-16 ***
+## stateSouth Dakota          2.863e-01  1.092e-03   262.243  &lt; 2e-16 ***
+## stateTennessee             3.202e-03  5.690e-04     5.627 1.83e-08 ***
+## stateTexas                -9.383e-02  4.791e-04  -195.841  &lt; 2e-16 ***
+## stateUtah                  9.163e-02  7.532e-04   121.658  &lt; 2e-16 ***
+## stateVermont               1.079e-01  1.689e-03    63.899  &lt; 2e-16 ***
+## stateVirginia              1.019e-01  5.465e-04   186.393  &lt; 2e-16 ***
+## stateWashington            1.606e-01  5.750e-04   279.304  &lt; 2e-16 ***
+## stateWest Virginia        -2.055e-02  8.174e-04   -25.141  &lt; 2e-16 ***
+## stateWisconsin             3.286e-01  5.656e-04   581.007  &lt; 2e-16 ***
+## stateWyoming               1.982e-01  1.630e-03   121.556  &lt; 2e-16 ***
+## avg_poll                   2.800e-02  9.301e-06  3010.531  &lt; 2e-16 ***
+## incumbent_partyTRUE        5.812e-02  1.293e-04   449.523  &lt; 2e-16 ***
+## ---
+## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+## 
+## (Dispersion parameter for binomial family taken to be 1)
+## 
+##     Null deviance: 25631135  on 413  degrees of freedom
+## Residual deviance:  3569384  on 359  degrees of freedom
+## AIC: 3575717
+## 
+## Number of Fisher Scoring iterations: 3</code></pre>
+</div>
 
 
 
