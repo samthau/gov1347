@@ -361,7 +361,7 @@ wrong_party <- wrong_party %>%
 wrong_party = wrong_party[!duplicated(wrong_party$States),]
 
 wrong_full <- wrong_inc %>% left_join(wrong_party, by = c("year" = "year"))
-colnames(wrong_full) <- c("Year", "States Incorrectly Predicted By Incumbency Model","States Incorrectly Predicted by State Model" )
+colnames(wrong_full) <- c("Year", "States Incorrectly Predicted By Incumbency Model","States Incorrectly Predicted by Party Model" )
 
 kbl(wrong_full)  %>% kable_paper(full_width = F) %>% kable_styling(position = "center")
 
