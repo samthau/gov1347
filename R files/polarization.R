@@ -397,7 +397,7 @@ sim_df <- sim_df %>% mutate_at(vars(VEP), funs(round(.)))
 
 vep_std <- vep_df %>%
   group_by(state) %>% 
-  summarise(vep_sd = sd(VEP)) 
+  summarise(vep_sd = sd(VEP))
 
 sim_df <- sim_df %>% left_join(vep_std, by = c("state" = "state"))
 
