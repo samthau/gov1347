@@ -582,14 +582,14 @@ summary {
 </style>
 <div id="introduction" class="section level2">
 <h2>Introduction</h2>
-<p>At the time of writing, we are two days away from the 2020 presidential election between Donald Trump and Joe Biden. Many believe that this may be the most important election in the history of the United States. The question on everyone’s mind is the same: who is going to win? I’ll discuss the model I have built, and then show my prediction. There are three parts to the model:</p>
+<p>At the time of writing, we are two days away from the 2020 presidential election between Donald Trump and Joe Biden. Many believe that this may be the most important election in the history of the United States. The question on everyone’s mind is the same: who is going to win? I’ll discuss the model I have built, and then show my prediction. There are four parts to the model:</p>
 <ol style="list-style-type: decimal">
 <li><p>Estimating turnout in each state.</p></li>
 <li><p>Estimating vote share for each candidate in each state.</p></li>
 <li><p>Estimating national polling error.</p></li>
 <li><p>Simulating the election based on the estimated parameters.</p></li>
 </ol>
-<p>I’ll go through each section in turn, and then return to the results at the end of the post to decide what I think of this model.</p>
+<p>I’ll go through each section in turn, examine the results, and then decide what I think of this model.</p>
 </div>
 <div id="the-basic-structure" class="section level2">
 <h2>The Basic Structure</h2>
@@ -1632,7 +1632,8 @@ WY
 <div id="initial-model-assessment" class="section level2">
 <h2>Initial Model Assessment</h2>
 <p>While this model is much more sophisticated than anything else that I have built this past semester, I think it is still flawed. While the state to state correlation and national polling error terms are the most interesting model I have built, I did not spend much time fine tuning them. State to state correlation is certainly something I wish I spent more time on, as this is a feature that is notoriously hard to get right<a href="#fn8" class="footnote-ref" id="fnref8"><sup>8</sup></a>. I also wish I had the chance to run the full model on previous elections, conducting yet another round of out of sample validation. It would be interesting to see how this model performs with data that do not suggest a blowout election. One other note is that this model seems to understate the value of the electoral college - other models that I have seen do have the possibility of a electoral college and popular vote victor split, which did not occur here.</p>
-<p>All in all, this model gives Biden an extremely high chance of victory, which does make sense given the national enviornment. This model is quite certain of the victory, but everyone should remember that events with small probabilities do happen occasionally, no matter how small the probability is. What this suggests is that for Donald Trump to win re-electoin, he needs a massive polling error in his favor, or he needs courts to allow him to conduct extra-legal shenanigans that throw out votes. One final thing to remember is this: all models are wrong, but some models are useful. Undoubtedly, this model will be wrong in the exact votes, but it can still tell us that Biden has a very, very good chance of victory.</p>
+<p>All in all, this model gives Biden an extremely high chance of victory, which does make sense given the national enviornment. This model is quite certain of the victory, but everyone should remember that events with small probabilities do happen occasionally, no matter how small the probability is. Also, frankly, I think my model is way to certain. I think further experimentation with variable selection might introduce more uncertainty, or changing how polling variance is thought of.</p>
+<p>What this model suggests is that for Donald Trump to win re-election, he needs a massive polling error in his favor, or he needs courts to allow him to conduct extra-legal shenanigans that throw out votes. One final thing to remember is this: all models are wrong, but some models are useful. Undoubtedly, this model will be wrong in the exact votes, but it can still tell us that Biden has a very, very good chance of victory.</p>
 </div>
 <div id="appendix-data" class="section level2">
 <h2>Appendix: Data</h2>

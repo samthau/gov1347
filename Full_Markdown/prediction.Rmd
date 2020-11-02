@@ -159,7 +159,7 @@ colnames(turnout_2020_pred) <- c("turnout", "state")
 ```
 
 ## Introduction
-At the time of writing, we are two days away from the 2020 presidential election between Donald Trump and Joe Biden. Many believe that this may be the most important election in the history of the United States. The question on everyone's mind is the same: who is going to win? I'll discuss the model I have built, and then show my prediction. There are three parts to the model:
+At the time of writing, we are two days away from the 2020 presidential election between Donald Trump and Joe Biden. Many believe that this may be the most important election in the history of the United States. The question on everyone's mind is the same: who is going to win? I'll discuss the model I have built, and then show my prediction. There are four parts to the model:
 
 1. Estimating turnout in each state. 
 
@@ -169,7 +169,7 @@ At the time of writing, we are two days away from the 2020 presidential election
 
 4. Simulating the election based on the estimated parameters. 
 
-I'll go through each section in turn, and then return to the results at the end of the post to decide what I think of this model. 
+I'll go through each section in turn, examine the results, and then decide what I think of this model. 
 
 ## The Basic Structure
 The end goal of this model is to estimate the number of voters that for each candidate in each state. Given that I want to do this with a probibalistic model, the natrual choice to do that is with draws from binomial random variables:
@@ -595,7 +595,9 @@ This plot shows Biden with a commanding lead in the national popular vote, winni
 ## Initial Model Assessment
 While this model is much more sophisticated than anything else that I have built this past semester, I think it is still flawed. While the state to state correlation and national polling error terms are the most interesting model I have built, I did not spend much time fine tuning them. State to state correlation is certainly something I wish I spent more time on, as this is a feature that is notoriously hard to get right[^8]. I also wish I had the chance to run the full model on previous elections, conducting yet another round of out of sample validation. It would be interesting to see how this model performs with data that do not suggest a blowout election. One other note is that this model seems to understate the value of the electoral college - other models that I have seen do have the possibility of a electoral college and popular vote victor split, which did not occur here.
 
-All in all, this model gives Biden an extremely high chance of victory, which does make sense given the national enviornment. This model is quite certain of the victory, but everyone should remember that events with small probabilities do happen occasionally, no matter how small the probability is. What this suggests is that for Donald Trump to win re-electoin, he needs a massive polling error in his favor, or he needs courts to allow him to conduct extra-legal shenanigans that throw out votes. One final thing to remember is this: all models are wrong, but some models are useful. Undoubtedly, this model will be wrong in the exact votes, but it can still tell us that Biden has a very, very good chance of victory. 
+All in all, this model gives Biden an extremely high chance of victory, which does make sense given the national enviornment. This model is quite certain of the victory, but everyone should remember that events with small probabilities do happen occasionally, no matter how small the probability is. Also, frankly, I think my model is way to certain. I think further experimentation with variable selection might introduce more uncertainty, or changing how polling variance is thought of. 
+
+What this model suggests is that for Donald Trump to win re-election, he needs a massive polling error in his favor, or he needs courts to allow him to conduct extra-legal shenanigans that throw out votes. One final thing to remember is this: all models are wrong, but some models are useful. Undoubtedly, this model will be wrong in the exact votes, but it can still tell us that Biden has a very, very good chance of victory. 
 
 ## Appendix: Data
 Data for this model came from a number of places. In some situations, I also scaled some of the data so that different measures had approximately the same magnitude. 
