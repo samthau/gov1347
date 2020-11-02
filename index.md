@@ -1,7 +1,5 @@
 This blog is a log of the assignments for the Harvard College class Government 1347: Election Analytics taught by Dr. Ryan Enos. The blog will be updated every Saturday throughout the fall semester of 2020. 
 
-## [Election Prediction](Posts/prediction.html)
-This is my prediction for the 2020 election. I'll update the data behind the model through the evening of Monday, November 2nd. 
 
 ## Blog Posts
 
@@ -26,6 +24,8 @@ Examination of a beta-binomial model, estimated using hierarchical empirical Bay
 # [7. Parties and Uncertainty](Posts/polarization.html)
 An examination of the predictive power of different two sided models over time. In addition, I take yet another crack at a probabilistic model, this time with some success in introducing variance. 
 
+# [8. Election Prediction](Posts/prediction.html)
+This is my prediction for the 2020 election. I build a probabilistic model that includes correlation between states. 
 
 # [Appendix](Posts/appendix.html)
 A running log of content that does not quite fit into the blog. If updated to go along with a post, a note will be made in the corresponding blog post. Last updated for [7. Parties and Uncertainty](Posts/polarization.html). 

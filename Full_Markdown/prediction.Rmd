@@ -159,30 +159,32 @@ colnames(turnout_2020_pred) <- c("turnout", "state")
 ```
 
 ## Introduction
-At the time of writing, we are two days away from the 2020 presidential election between Donald Trump and Joe Biden. Many believe that this may be the most important election in the history of the United States. The question on everyone's mind is the same: who is going to win? I'll first show the results of the model, and then explain the mechcanics going on underneath the hood. There are three parts to the model:
+At the time of writing, we are two days away from the 2020 presidential election between Donald Trump and Joe Biden. Many believe that this may be the most important election in the history of the United States. The question on everyone's mind is the same: who is going to win? I'll discuss the model I have built, and then show my prediction. There are three parts to the model:
 
 1. Estimating turnout in each state. 
 
 2. Estimating vote share for each candidate in each state. 
 
-3. Simulating the election based on the estimated parameters. 
+3. Estimating national polling error. 
 
-I'll go through each section in turn, and then return to the results at the end of the post to decide what I think of this model. I believe that this model gives reasonable predictions, but there are oddities that point to posisble problems that should be discussed. 
+4. Simulating the election based on the estimated parameters. 
+
+I'll go through each section in turn, and then return to the results at the end of the post to decide what I think of this model. 
 
 ## The Basic Structure
 The end goal of this model is to estimate the number of voters that for each candidate in each state. Given that I want to do this with a probibalistic model, the natrual choice to do that is with draws from binomial random variables:
 
 $$\textrm{Votes}_{ic}\sim\textrm{Bin}(n_{i}, p_{ic})$$
-The subscripts $i$ denotes each state, and the subscript $c$ denotes each candidate. For both Trump and Biden, each simulation of the election is a draw from a set of 102 random variables: two binomial distributions for each state, with 51 different turnout values and 102 different probability values.Simulating these draws is exactly step three in the process that I explained in the introduction. In my model, both $n_i$ and $p_{ic}$ are also random variables, making this a sort of hierarchical model. Let's being with looking at how turnout is estimated. 
+The subscripts $i$ denotes each state, and the subscript $c$ denotes each candidate. For both Trump and Biden, each simulation of the election is a draw from a set of 102 random variables: two binomial distributions for each state, with 51 different turnout values and 102 different probability values.Simulating these draws is exactly step four in the process that I explained in the introduction. In my model, both $n_i$ and $p_{ic}$ are also random variables, making this a sort of hierarchical model. Let's being with looking at how turnout is estimated. 
 
 ## Estimating Turnout
-I estimate turnout using a pooled model, across all states and across several elections. After spending some time looking at the data, I settled on using a poisson regression to estimate turnout. Poisson models are a form of generalized linear models, based on the [poisson distribution](https://en.wikipedia.org/wiki/Poisson_distribution). Because the data is a set of discrete counts, this seemed like a reasonable choice to me[^1]. I used a great number of covariates to estimate the turnout model. This includes demographic data, the polling margin in the state[^2], lagged variables for the previous election's turnout and voting margin, and a state fixed effect indicator. For a full desription of the data, see [Appendix: Data] at the end of this post. We can look at the full output from the model:
+I estimate turnout using a pooled model, across all states and across every election since 1992 After spending some time looking at the data, I settled on using a poisson regression to estimate turnout. Poisson models are a form of generalized linear models, based on the [poisson distribution](https://en.wikipedia.org/wiki/Poisson_distribution). Because the data is a set of discrete counts, this seemed like a reasonable choice to me[^1]. I used a great number of covariates to estimate the turnout model. This includes demographic data, the polling margin in the state[^2], lagged variables for the previous election's turnout and voting margin, and a state fixed effect indicator. For a full desription of the data, see [Appendix: Data] at the end of this post. We can look at the full output from the model:
 
 ```{r, echo=FALSE,  warning = FALSE, message = FALSE, class.output="scroll-100" }
  summary(turnout_model)
 ```
 
-The key numbers for in sample fit are the null and residual deviances, at the very bottom of the funciton call. The residual deviance being significantly smaller, `r format(turnout_model$null.deviance, scientific = FALSE)` versus `r format(turnout_model$deviance, scientific = FALSE)`, this suggests that there is significant improvement against the null[^3] model. Becuase of scaling discussed in the [Appendix: Data] section, the interpretation of coefficients is not particularly enlightening. One thing to remember is that becuase this is a poisson regression, the signs of the coefficients indicate which direction the log of the total turnout would move. The coefficient on the poll margin is positive, which actully goes against some research - it suggests that a greater poll margin leads to a higher turnout. It could be that higher poll margins are the result of more people voting, meaning tha the regression is not accurately capturing the cause and effect relationship. 
+The key numbers for in sample fit are the null and residual deviances, at the very bottom of the funciton call. The residual deviance being significantly smaller, `r format(turnout_model$null.deviance, scientific = FALSE)` versus `r format(turnout_model$deviance, scientific = FALSE)`, suggests that there is significant improvement against the null[^3] model. Becuase of scaling discussed in the [Appendix: Data] section, the interpretation of coefficients is not particularly enlightening. One thing to remember is that becuase this is a poisson regression, the signs of the coefficients indicate which direction the log of the total turnout would move. The coefficient on the poll margin is positive, which actully goes against some research - it suggests that a greater poll margin leads to a higher turnout. It could be that higher poll margins are the result of more people deciding to vote for a particular party, meaning that turnout is influencing the margin, suggesting that the regression may not properly capture cause and effect.
 
 We can also look at out of sample validation. In this case, I conducted leave one out validition by year, and then calculated the sum of the squares of the residuals in each state as a measure of fit.
 
@@ -220,7 +222,7 @@ kbl(out_error)  %>% kable_paper(full_width = F) %>% kable_styling(position = "ce
 
 ```
 
-While these numbers do seem quite high, it is important to remember that these values are squared. Numbers that are on the order of ten to the twelfth represent being off by millions of votes, which in an election of roughly 120 million votes is quite accurate. The final thing to do with this model is predict the turnout for each state in 2020, which we will use later when we simulate the election.
+While these numbers do seem quite high, it is important to remember that these values are squared. Numbers that are on the order of ten to the twelfth represent being off by millions of votes, which in an election of roughly 120 million votes is quite good The final thing to do with this model is predict the turnout for each state in 2020, which we will use later when we simulate the election.
 
 ## Estimating Vote Share
 ```{r echo = FALSE, return = FALSE, warning = FALSE, message = FALSE}
@@ -348,7 +350,7 @@ chl_vote_model <- glm(cbind(chl_votes, total - chl_votes) ~ rdi_q2 + gdp + state
 ```
 
 
-Estimating vote share happens roughly the same way estimating turnout, just with a different generalized linear model. Similar to many of the models I have used throughout this blog, I am using a two sided model based on party incumbency status[^4].  I still used a pooled model across all states and years that I have complete data for. 
+Estimating vote share happens roughly the same way estimating turnout, just with a different generalized linear model. Similar to many of the models I have used throughout this blog, I am using a two sided model based on party incumbency status[^4].  I still used a pooled model across all states and years since the 1992 election. 
 
 For both the incumbent and the challenger models, I use a binomial regression, estimating the fraction of the total votes that each candidate will win. The regression uses demographic data, polling data, previous eleciton results, economic data, along with party and state fixed effects. We can take a look at both the incumbent and challenger models. First, the incumbent model:
 
@@ -356,7 +358,7 @@ For both the incumbent and the challenger models, I use a binomial regression, e
  summary(inc_vote_model)
 ```
 
-We can also look the challenger model:
+We can also look at the challenger model:
 
 ```{r, echo=FALSE,  warning = FALSE, message = FALSE, class.output="scroll-100" }
  summary(chl_vote_model)
@@ -414,6 +416,9 @@ kbl(outsamp_votes)  %>% kable_paper(full_width = F) %>% kable_styling(position =
 
 For the most part, the model is quite accurate. It misses a few states in some elections. As dicussed [last week](polarization.html), a very similar model misses predictions in swing states quite frequently. This model would have incorrectly called the 2016 election for Hillary Clinton. These incorrect predictions in part stem from reliance on polling data, without accounting for variances. Therefore, we need to introduce some uncertainty into the model. 
 
+## National Polling Error
+Much has been made of the possibility of national polling error. In 2016, a roughly 3 point national polling error meant that many were blindsided by Trump's narrow victory in a number of midwest states. To simulate that, I calculated the mean and variance for polling errors for both Democrats and Republicans in elections since 1992. Interestingly, both parties tend to outperform their polls, by 2.40 and 2.11 points for Democrats and Republicans respectively. 
+
 ## Simulating Elections
 Returning to the basic framework of the model, we have:
 
@@ -427,9 +432,15 @@ In this case, $\lambda_i$ are the predicted mean turnout in each state. As previ
 
 Instead of drawing 102 values one at a time for each vote share for each candidate, we can instead draw two sets of 51. the mean of each value will be the predicted vote share from the vote share models previously discussed. We also need a covariance matrix, which explains how vote shares in different states are related to one another. 
 
-We can calculate a covariance model in two steps: first, building a similarity matrix that tells us how similar each state is to one another, using all of the non-categorical data from the vote share model. The key detail of this similarity matrix is that values are between -1 and 1. Values near 1 indicate high similarity (or correlation), and negative values indicate that states are very dissimilar. We can then scale this makeshift correlation matrix by standard deviations in the polls over the past several weeks to get a covariance matrix. The standard deviations in the polling averages that I use are quite small, suggesting a very stable race, and therefore a relatively small amount of uncertainty[^5]. 
+We can calculate a covariance model in two steps: first, building a similarity matrix that tells us how similar each state is to one another, using all of the non-categorical data from the vote share model. The key detail of this similarity matrix is that values are between -1 and 1. Values near 1 indicate high similarity (or correlation), and negative values indicate that states are very dissimilar. We can then scale this makeshift correlation matrix by standard deviations in the polls over the past several weeks to get a covariance matrix. The standard deviations in the polling averages that I use are quite small, suggesting a very stable race, and therefore a relatively small amount of uncertainty[^6]. 
 
-As a final measure of uncertainty, I also add a national polling error to both Trump and Biden's vote shares. These values are drawn from independent [stable distributions](https://en.wikipedia.org/wiki/Stable_distribution), which I'll denote $S_{c}$. Parameters for these distributions come from the mean and variance of the residual values between the final national polls and the actual vote share for each party. This value is meant to simulate a national polling error. This leaves us with a complete model, from which we can draw simulated values in order:
+The final step is the national polling error, which I draw from two independent [stable distributions](https://en.wikipedia.org/wiki/Stable_distribution), one for Biden and one for Trump. I intentionally picked stable distributions becuase they are "fat-tailed," meaning that events farther from the mean, holding variance fixed, happen more frequently than in a normal distribution. This choice is meant to introduce a potentially large amount of polling error, and therefore variance into the model. Something to note is that these terms are independent for each candidate: both Biden *and* Trump could have polling errors in their favor in this model[^7]. 
+
+One thing to note is that in a sense, including both variance at the state and national level is double counting variance. Variance in a model at the national level is a direct function of variance at the state level. However, in the uncertain times brought on by COVID-19 and one candidate actively trying to discredit the election, I decided that increasing the variance seems reasonable. I'll denote this variable $s_{c}$. We can then re-write the basic structure of the model as:
+
+$$\textrm{Votes}_{ic}\sim\textrm{Bin}(n_{i}, p_{ic}+s_c)$$
+
+This leaves us with a complete model, from which we can draw simulated values in order:
 
 1. Draw the vote shares from the multivariate normal distributions for each candidate. 
 
@@ -492,7 +503,7 @@ kbl(avg_popvote_table)  %>% kable_paper(full_width = F) %>% kable_styling(positi
   scroll_box(width = "500px", height = "200px") %>% kable_styling(position = "center")
 ```
 
-A number of states are quite close, in ways that match our general intutitions about the race. South Carolina and Texas are both on razor thin margins. This model shows a blowout for Biden in a number of key states: he is up by more than ten points in Michigan, Florida, and Pennsylvannia. He also narrowly wins South Carolina, and nearly pulls out a victory in Texas. We also should look at the distribution of the electoral college and the popular vote. 
+This model shows a blowout for Biden in a number of key states: he is up by more than ten points in Michigan, Florida, and Pennsylvannia. He also narrowly wins South Carolina, and nearly pulls out a victory in Texas. Overall, Biden wins `r mean(as.numeric(unlist(ec_results %>% filter(win == "Biden") %>% dplyr::select(x))))` on average, with Trump picking up the remaining `r mean(as.numeric(unlist(ec_results %>% filter(win == "Trump") %>% dplyr::select(x))))`. Looking at the distribution of the electoral college outcomes fits exactly with this theme 
 
 ```{r echo = FALSE, return = FALSE, warning = FALSE, message = FALSE, results='hide'}
 biden_ec_plot <- ggplot(ec_results %>% filter(win == "Biden"), aes(x = x, fill = win), alpha = 0.75 ) +
@@ -531,7 +542,7 @@ ec_plot
 
 ```
 
-We can see that there is very, very little overlap in the electoral college results. In fact, this model predicts Biden victory `r victors[1,2]` out of 10,000 simulations, while Trump wins the remaining `r victors[2,2]`. As extreme as this result is, it's not totally out of line with [The Economist's prediction](https://projects.economist.com/us-2020-forecast/president), but I'll discuss this model has some serious problems. We can also look at the plot of the popular vote shares, and we can again see very little overlap.  
+We can see that there is very, very little overlap in the electoral college results. In fact, this model predicts Biden victory `r victors[1,2]` out of 10,000 simulations, while Trump wins the remaining `r victors[2,2]`. As extreme as this result is, it's not totally out of line with [The Economist's prediction](https://projects.economist.com/us-2020-forecast/president). We can also look at the plot of the popular vote shares, and we can again see very little overlap.  
 
 ```{r echo = FALSE, return = FALSE, warning = FALSE, message = FALSE, results='hide'}
 pv_df <- biden_pv %>% left_join(trump_pv, by = c("sim" = "sim"))
@@ -579,34 +590,30 @@ pv_plot <- gridExtra::grid.arrange(trump_pv_plot, biden_pv_plot, ncol = 2)
 pv_plot
 ```
 
-This plot shows Biden with a commanding lead in the national popular vote, winning above 50% of the vote in essentially every contest. There is a electoral college and popular vote split in `r pop_vote_split` of the 10,000 contests, meaning that Trump only wins when he happens to win the popular vote. 
+This plot shows Biden with a commanding lead in the national popular vote, winning above 50% of the vote in essentially every contest. There is a electoral college and popular vote split in `r pop_vote_split` of the 10,000 contests, meaning that Trump only wins when he happens to win the popular vote. Texas and South Carolina coming down to razor thing margins fits with the heavily Democrat leaning nationial enviornment.
 
 ## Initial Model Assessment
-While this model is much more sophisticated than anything else that I have built this past semester, I think it is still flawed. The main flaw that I see is the state to state correlation: a blowout in Pennsylvannia should show that Biden is winning handily in the Midwest, and yet Ohio is still quite close.  
+While this model is much more sophisticated than anything else that I have built this past semester, I think it is still flawed. While the state to state correlation and national polling error terms are the most interesting model I have built, I did not spend much time fine tuning them. State to state correlation is certainly something I wish I spent more time on, as this is a feature that is notoriously hard to get right[^8]. I also wish I had the chance to run the full model on previous elections, conducting yet another round of out of sample validation. It would be interesting to see how this model performs with data that do not suggest a blowout election. One other note is that this model seems to understate the value of the electoral college - other models that I have seen do have the possibility of a electoral college and popular vote victor split, which did not occur here.
 
-At the same time, this model has some pretty interesting features, namely the state to state correlation (even if it's not quite right). This is a feature that is notoriously hard to get right[^6], so I'm not particularly concerned that if the correlations are off. I wish I had more time to tune this, because I feel like this model overall understates the value of the electoral college (which in part comes from states voting similarly). 
-
-All in all, this model gives Biden an extremely high chance of victory, which does make sense given the national enviornment. This model is quite certain of the victory, but everyone should remember that events with small probabilities do happen occasionally, no matter how small the probability is. However, what this suggests is that for Donald Trump to win re-electoin, he needs a massive polling error in his favor, or he needs courts to allow him to conduct extra-legal shenanigans that throw out votes. 
-
-One thing to remember is this: I once heard that all models are wrong, but some models are useful. Undoubtedly, this model will be wrong, but it can still tell us a fair amount about what we expect to happen in the election. 
+All in all, this model gives Biden an extremely high chance of victory, which does make sense given the national enviornment. This model is quite certain of the victory, but everyone should remember that events with small probabilities do happen occasionally, no matter how small the probability is. What this suggests is that for Donald Trump to win re-electoin, he needs a massive polling error in his favor, or he needs courts to allow him to conduct extra-legal shenanigans that throw out votes. One final thing to remember is this: all models are wrong, but some models are useful. Undoubtedly, this model will be wrong in the exact votes, but it can still tell us that Biden has a very, very good chance of victory. 
 
 ## Appendix: Data
-Data for this model came from a number of places. In some situations, I also scaled some of the data so that different measures had approximately the same magnitude. There are a number of data sources used throughout the model.
+Data for this model came from a number of places. In some situations, I also scaled some of the data so that different measures had approximately the same magnitude. 
 
-1. Polling data. For historical data, this was an average of state level polls over the final three weeks of the election. This is a very crude poll aggregation, in averaging over time. The choice of three weeks comes from striking a balance: using polls that are recent enough, but also making sure not to limit the amount of data I have. Averaging over time is a strategy used by both [FiveThirtyEight](https://fivethirtyeight.com/features/how-fivethirtyeights-2020-presidential-forecast-works-and-whats-different-because-of-covid-19/) and [The Economist](https://projects.economist.com/us-2020-forecast/president/how-this-works). For 2020 data, I used the smoothed polling average from [FiveThirtyEight](https://projects.fivethirtyeight.com/2020-election-forecast/?cid=rrpromo), again taking the average over the final three weeks. 
+1. Polling data. For historical data, this was an average of state level polls over the final three weeks of the election. This is a very crude form of poll aggregation, averaging over time. The choice of three weeks comes from striking a balance between using polls that are recent enough, but also making sure not to limit the amount of data I have. Averaging over time is a strategy used by both [FiveThirtyEight](https://fivethirtyeight.com/features/how-fivethirtyeights-2020-presidential-forecast-works-and-whats-different-because-of-covid-19/) and [The Economist](https://projects.economist.com/us-2020-forecast/president/how-this-works). For 2020 data, I used the smoothed polling average from [FiveThirtyEight](https://projects.fivethirtyeight.com/2020-election-forecast/?cid=rrpromo), again taking the average over the final three weeks. One added benefit is that pollsters tend to herd in the final week or so before the election - meaning that no one wants to be an outlier, so incorporating data from farther back helps negate this effect.
 
-2. Economic data. This comes both from sources provided in class, and from the Bureau of Economic Analysis. I used two pieces of data: second quarter GDP at the national level, and real disposible income at the state level. Real disposible income data comes from [“Quarterly Personal Income By State.”](https://apps.bea.gov/itable/iTable.cfm?ReqID=70&step=1). GDP data comes from class. The reasoning for including a mix of both economic indicators and levels is to cover the widest range of possible impact on voting behavior, and to make sure that a single indicator from 2020 does not completely skew the results. Given that we are in a recession, something like GDP will show a massive loss in the second quarter, while real disposible income will show a huge gain (due to the CARES Act). 
+2. Economic data. This comes both from sources provided in class, and from the Bureau of Economic Analysis. I used two pieces of data: second quarter GDP at the national level, and real disposible income at the state level. Real disposible income data comes from [“Quarterly Personal Income By State.”](https://apps.bea.gov/itable/iTable.cfm?ReqID=70&step=1). GDP data comes from class. The reasoning for including a mix of both economic indicators and levels is to cover the widest range of possible impact on voting behavior, and to make sure that a single indicator from 2020 does not completely skew the results. Given that we are in a recession, something like GDP will show a massive loss in the second quarter, while real disposible income will show a huge gain (due to the CARES Act). As mentioned in the footnotes, there is significant evidence that the economy does impact how people vote.
 
-3. Demographic data. I use a range of demographic data at the state level, as provided in class. In both the turnout and vote share esimation regressions, I used the same set of data: fraction of the population that is white, black, hispanic, asian, age 20 to 30, age 30 to 45, and age 45 to 56. There are other race or age categories that I could include, but I wanted to avoid collinearity - you can figure out roughy how many people there are over the age of 65 by adduing up all the other categories. This data came from the dataset provided in class. One problem in this case is that the dataset I was using only had demographic data up to 2018, which is what I substituted for 2020. 
+3. Demographic data. I use a range of demographic data at the state level, as provided in class. In both the turnout and vote share esimation regressions, I used the same set of data: fraction of the population that is white, black, hispanic, asian, age 20 to 30, age 30 to 45, and age 45 to 65 There are other race or age categories that I could include, but I wanted to avoid collinearity - you can figure out roughy how many people there are over the age of 65 by adduing up all the other categories. This data came from the dataset provided in class. One problem in this case is that the dataset I was using only had demographic data up to 2018, which is what I substituted for 2020. A common refrain in predictive models is "garbage in, garbage out," meaning that this could cause problems for predictions. There were two related reasons to include demographic information: first, it acts as a way to have correlation between states, and also because certain demographic groups tend to vote in particular ways. For example, African American women [vote overwhelmingly](https://www.cnn.com/2020/10/21/politics/black-women-voters-michigan/index.html) for Democrats. 
 
-4. Indicators. These are dummy variables, primarily for party and state. Given the use in a pooled model, they are meant to capture time invariant fixed effects. 
+4. Indicators. These are dummy variables, primarily for party and state. Given the use in a pooled model, they are meant to capture time invariant fixed effects. Becuase I am primarily working with a two sided model based on incumbency, adding in a control for party seems like a reasonable thing to do to capture some amount of the effect of political polarization. State fixed effects are meant to account for the particular impact each state, assuming that it is constant over time, which could account for things like cost of voting. 
 
-5. Lagged data. This includes lagged vote share data, along with lagged turnout data when estimating turnout. 
+5. Lagged data. This includes lagged vote share data, along with lagged turnout data when estimating turnout. The reason for including this information is simple: the best predictor of the future is the past. 
 
-One important thing I did early on in the process was scale a large amount of my data to have a mean of zero and standard deviation of one, within each year. I scaled previous turnout, the demographic and real disposible income data based on each year[^7]. This was primarily to ensure that past turnout data did not completely overwhelm everything else, as it was on a completely different order of magnitude. I intentionally did not scale the polling data, because I needed the variances in raw form to incorporate into the model later. 
+One important thing I did early on in the process was scale a large amount of my data to have a mean of zero and standard deviation of one, within each year. I scaled previous turnout, vote margin, demographic data, and real disposible income data based on each year[^9]. This was primarily to ensure that past turnout data did not completely overwhelm everything else, as it was on much larger  order of magnitude. I intentionally did not scale the polling data, because I needed the variances in raw form to incorporate into the model at other points. 
 
 
-[^1]: There are some assumptions that should hold for a variable to be distributed poisson, and I believe that most of them should hold. The first is that individual votes being cast happens independently from one another (for example, me casitng a vote does not make you in particular any more or less likely to cast a vote). Second, the mean should be roughly equal to the variance, which in this case it is not. The mean of total votes cast is roughly $2*10^7$, while the variance is roughly $5.6*10^12$, meaning that we have overdispersion. For simplicity in the simulation process, I decided to stick with using a poisson regression, even if it does mean that the variance in turnout will be lower. 
+[^1]: There are some assumptions that should hold for a variable to be distributed poisson, and I believe that most of them should hold. The first is that individual votes being cast happens independently from one another (for example, me casitng a vote does not make you in particular any more or less likely to cast a vote). Second, the mean should be roughly equal to the variance, which in this case it is not. The mean of total votes cast is roughly $2\times10^7$, while the variance is roughly $5.6\times10^{12}$, meaning that we have overdispersion. For simplicity in the simulation process, I decided to stick with using a poisson regression, even if it does mean that the variance in turnout will be lower. 
 
 [^2]: In general, states that are more competitive see surges in turnout. See [Li et Al. (2018)](https://www-liebertpub-com.ezp-prod1.hul.harvard.edu/doi/pdf/10.1089%2Felj.2017.0478) and [Bursztyn et Al. (2017)](https://www.nber.org/system/files/working_papers/w23490/w23490.pdf).
 
@@ -618,6 +625,8 @@ One important thing I did early on in the process was scale a large amount of my
 
 [^6]: One thing to note about this is that another way to measure uncertainty would have been to use the standard deviations from each state in individual polls, rather than in the average. I decided against this because individual polls can be quite noisy, and poll aggregators like FiveThirtyEight do a good job of putting together a trend line that removes a lot of the noise. 
 
-[^7]: See G. Elliot Morris, Nate Cohn, and Nate Silver's twitter feeds for examples, along with thisi [blog post](https://statmodeling.stat.columbia.edu/2020/08/31/problem-of-the-between-state-correlations-in-the-fivethirtyeight-election-forecast/) from Andrew Gelman.
+[^7]: This is less of a modelling choice, and more about convenience as generating draws from correlated stable distributions. In fact, the covariance between errors is negative, as expected, meaning that this is a clear limitation on the model. However, it does fit with the idea that both Democrats and Republicans consistently beat their polls. 
 
-[^8]: So that within each year, the mean value is 0 and the standard deviation is 1. I did not scale the GDP as it would all be set to mean 0, as it was the same for all states. 
+[^8]: See G. Elliot Morris, Nate Cohn, and Nate Silver's twitter feeds for examples, along with this [blog post](https://statmodeling.stat.columbia.edu/2020/08/31/problem-of-the-between-state-correlations-in-the-fivethirtyeight-election-forecast/) from Andrew Gelman.
+
+[^9]: So that within each year, the mean value is 0 and the standard deviation is 1. I did not scale the GDP as it would all be set to mean 0, as it was the same for all states. 
