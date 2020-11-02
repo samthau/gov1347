@@ -32,7 +32,7 @@ nat_popvote_df <- read_csv("../Data/popvote_1948-2016.csv")
 nat_poll_df    <- read_csv("../Data/pollavg_1968-2016.csv")
 
 state_popvote_df <- read_csv("../Data/popvote_bystate_1948-2016.csv") %>%
-  mutate(D_pv = D/total, R_pv = R/total, vote_margin = D_pv - R_pv)
+  mutate(D_pv = D/total, R_pv = R/total, vote_margin = abs(D_pv - R_pv))
 
 state_poll_df <- read_csv("../Data/pollavg_bystate_1968-2016.csv") %>% 
   filter(days_left <= 21) %>%
@@ -108,7 +108,7 @@ wide_poll_2020 <- poll_2020_clean %>% filter(party == "democrat") %>%
             by = c("state" = "state"))
 colnames(wide_poll_2020) <- c("state", "biden", "dem_poll", "dem", "trump", "rep_poll", "rep")  
 wide_poll_2020$state <- c(state.abb, 'DC')[match(wide_poll_2020$state, c(state.name, 'District of Columbia'))]
-poll_margin_2020 <- wide_poll_2020 %>% mutate(poll_margin = rep_poll - dem_poll) %>% 
+poll_margin_2020 <- wide_poll_2020 %>% mutate(poll_margin = abs(rep_poll - dem_poll)) %>% 
   dplyr::select(state, poll_margin)
 
 turnout_2020 <- poll_margin_2020 %>% 
@@ -131,7 +131,7 @@ turnout_scaled <- turnout_scaled %>% filter(year > 1984) %>%
   mutate(last_vote_margin = dplyr::lag(vote_margin, k = 1, default = NA)) %>%
   mutate(last_turnout = dplyr::lag(total, k = 1, default = NA)) %>%
   ungroup() %>%
-  dplyr::select(state,VEP,total, year, poll_margin, num_pred) %>% group_by(state) %>% mutate_at(num_pred, scale) %>% 
+  dplyr::select(state,VEP,total, year, poll_margin, num_pred) %>% group_by(year) %>% mutate_at(num_pred, scale) %>% 
   ungroup() %>% mutate_at(vars(VEP), funs(round(.))) %>% ungroup() %>% filter(year > 1990)
 
 
@@ -182,7 +182,7 @@ I estimate turnout using a pooled model, across all states and across several el
  summary(turnout_model)
 ```
 
-The key numbers for in sample fit are the null and residual deviances, at the very bottom of the funciton call. The residual deviance being significantly smaller, `r format(turnout_model$null.deviance, scientific = FALSE)` versus `r format(turnout_model$deviance, scientific = FALSE)`, this suggests that there is significant improvement against the null[^3] model. Becuase of scaling discussed in the [Appendix: Data] section, the interpretation of coefficients is not particularly enlightening. One thing to remember is that becuase this is a poisson regression, the signs of the coefficients indicate which direction the log of the total turnout would move. The coefficient on the poll margin and last vote margins are both negative, suggesting that there is higher turnout in closer elections, as expected.
+The key numbers for in sample fit are the null and residual deviances, at the very bottom of the funciton call. The residual deviance being significantly smaller, `r format(turnout_model$null.deviance, scientific = FALSE)` versus `r format(turnout_model$deviance, scientific = FALSE)`, this suggests that there is significant improvement against the null[^3] model. Becuase of scaling discussed in the [Appendix: Data] section, the interpretation of coefficients is not particularly enlightening. One thing to remember is that becuase this is a poisson regression, the signs of the coefficients indicate which direction the log of the total turnout would move. The coefficient on the poll margin is positive, which actully goes against some research - it suggests that a greater poll margin leads to a higher turnout. It could be that higher poll margins are the result of more people voting, meaning tha the regression is not accurately capturing the cause and effect relationship. 
 
 We can also look at out of sample validation. In this case, I conducted leave one out validition by year, and then calculated the sum of the squares of the residuals in each state as a measure of fit.
 
@@ -321,18 +321,16 @@ pred_df <- pred_df %>% add_column(year = rep(2020, 102), total = NA, D = NA, R =
 reg_df$inc_party <- as.logical(reg_df$inc_party)
 reg_df$chl_party <- as.logical(reg_df$chl_party)
 
-vote_num <- c("gdp", "rdi_q2", "Asian",
+vote_num <- c("rdi_q2", "Asian",
               "Black", "Hispanic", "Indigenous", "White", "Female", "Male", "age20",
               "age3045", "age4565", "age65")
 
 full_votes <- rbind(reg_df, pred_df) %>% dplyr::select(-incumbent,-inc_party, -chl_party) %>%
   mutate(inc_party = incumbent_party, chl_party = !incumbent_party) %>% 
-  group_by("state") %>%
-  mutate_at(vote_num, scale) %>% ungroup() %>%
+  group_by(year) %>%
+  mutate_at(vote_num, scale) %>% 
+  ungroup() %>%
   left_join(turnout_scaled %>% dplyr::select(state, year, last_vote_margin), by = c("state" = "state", "year" = "year"))
-
-colnames(full_votes)[38] <- "drop"  
-full_votes$drop <- NULL
 
 ## build vote share model
 inc_vote_model <- glm(cbind(inc_votes, total - inc_votes) ~ rdi_q2 + gdp + state + 
@@ -364,7 +362,7 @@ We can also look the challenger model:
  summary(chl_vote_model)
 ```
 
-Again, for both models, the residual deviances are orders of magnitude greater than the null deviances. One thing to note is that the incumbent model seems to have a better fit in sample than the challenger model, with a null deviance of `r format(inc_vote_model$deviance, scientific = FALSE)` against `r format(chl_vote_model$deviance, scientific = FALSE)`. 
+Again, for both models, the residual deviances are orders of magnitude greater than the null deviances. One thing to note is that the incumbent model seems to have a better fit in sample than the challenger model, with a null deviance of `r format(inc_vote_model$deviance, scientific = FALSE)` against `r format(chl_vote_model$deviance, scientific = FALSE)`. Unsurprinsingly, the coefficient on the polling average is large and positive, relative to other coefficients. Interestingly, the economic data coefficients are positive in the in incumbent model, but negative in the challenger model, which makes some intuitive sense. An incumbent party with a good economy is likely to have better success with voters[^5].
 
 For out of sample fit, we can look at the fraction of states that the model predicts correctly using leave one out validation based on year. 
 
@@ -494,7 +492,7 @@ kbl(avg_popvote_table)  %>% kable_paper(full_width = F) %>% kable_styling(positi
   scroll_box(width = "500px", height = "200px") %>% kable_styling(position = "center")
 ```
 
-A number of states are quite close, in ways that match our general intutitions about the race. Florida, Georgia, and Ohio are all close, which matches the general consensus about the race. However, it also shows Biden winning by 10 point in Pennsylvannia, which seems unlikley given how close a race there is in Ohio in this model. We also should look at the distribution of the electoral college and the popular vote. 
+A number of states are quite close, in ways that match our general intutitions about the race. South Carolina and Texas are both on razor thin margins. This model shows a blowout for Biden in a number of key states: he is up by more than ten points in Michigan, Florida, and Pennsylvannia. He also narrowly wins South Carolina, and nearly pulls out a victory in Texas. We also should look at the distribution of the electoral college and the popular vote. 
 
 ```{r echo = FALSE, return = FALSE, warning = FALSE, message = FALSE, results='hide'}
 biden_ec_plot <- ggplot(ec_results %>% filter(win == "Biden"), aes(x = x, fill = win), alpha = 0.75 ) +
@@ -584,7 +582,7 @@ pv_plot
 This plot shows Biden with a commanding lead in the national popular vote, winning above 50% of the vote in essentially every contest. There is a electoral college and popular vote split in `r pop_vote_split` of the 10,000 contests, meaning that Trump only wins when he happens to win the popular vote. 
 
 ## Initial Model Assessment
-While this model is much more sophisticated than anything else that I have built this past semester, I think it is still flawed. The main flaw that I see is the state to state correlation: a blowout in Pennsylvannia should show that Biden is winning handily in the Midwest, and yet Ohio is still quite close. There are also situations like Texas versus Arkansas: in this model, Arkansas seems to be closer to flipping from red to blue than Texas, which seems flat out wrong. 
+While this model is much more sophisticated than anything else that I have built this past semester, I think it is still flawed. The main flaw that I see is the state to state correlation: a blowout in Pennsylvannia should show that Biden is winning handily in the Midwest, and yet Ohio is still quite close.  
 
 At the same time, this model has some pretty interesting features, namely the state to state correlation (even if it's not quite right). This is a feature that is notoriously hard to get right[^6], so I'm not particularly concerned that if the correlations are off. I wish I had more time to tune this, because I feel like this model overall understates the value of the electoral college (which in part comes from states voting similarly). 
 
@@ -592,14 +590,34 @@ All in all, this model gives Biden an extremely high chance of victory, which do
 
 One thing to remember is this: I once heard that all models are wrong, but some models are useful. Undoubtedly, this model will be wrong, but it can still tell us a fair amount about what we expect to happen in the election. 
 
+## Appendix: Data
+Data for this model came from a number of places. In some situations, I also scaled some of the data so that different measures had approximately the same magnitude. There are a number of data sources used throughout the model.
+
+1. Polling data. For historical data, this was an average of state level polls over the final three weeks of the election. This is a very crude poll aggregation, in averaging over time. The choice of three weeks comes from striking a balance: using polls that are recent enough, but also making sure not to limit the amount of data I have. Averaging over time is a strategy used by both [FiveThirtyEight](https://fivethirtyeight.com/features/how-fivethirtyeights-2020-presidential-forecast-works-and-whats-different-because-of-covid-19/) and [The Economist](https://projects.economist.com/us-2020-forecast/president/how-this-works). For 2020 data, I used the smoothed polling average from [FiveThirtyEight](https://projects.fivethirtyeight.com/2020-election-forecast/?cid=rrpromo), again taking the average over the final three weeks. 
+
+2. Economic data. This comes both from sources provided in class, and from the Bureau of Economic Analysis. I used two pieces of data: second quarter GDP at the national level, and real disposible income at the state level. Real disposible income data comes from [“Quarterly Personal Income By State.”](https://apps.bea.gov/itable/iTable.cfm?ReqID=70&step=1). GDP data comes from class. The reasoning for including a mix of both economic indicators and levels is to cover the widest range of possible impact on voting behavior, and to make sure that a single indicator from 2020 does not completely skew the results. Given that we are in a recession, something like GDP will show a massive loss in the second quarter, while real disposible income will show a huge gain (due to the CARES Act). 
+
+3. Demographic data. I use a range of demographic data at the state level, as provided in class. In both the turnout and vote share esimation regressions, I used the same set of data: fraction of the population that is white, black, hispanic, asian, age 20 to 30, age 30 to 45, and age 45 to 56. There are other race or age categories that I could include, but I wanted to avoid collinearity - you can figure out roughy how many people there are over the age of 65 by adduing up all the other categories. This data came from the dataset provided in class. One problem in this case is that the dataset I was using only had demographic data up to 2018, which is what I substituted for 2020. 
+
+4. Indicators. These are dummy variables, primarily for party and state. Given the use in a pooled model, they are meant to capture time invariant fixed effects. 
+
+5. Lagged data. This includes lagged vote share data, along with lagged turnout data when estimating turnout. 
+
+One important thing I did early on in the process was scale a large amount of my data to have a mean of zero and standard deviation of one, within each year. I scaled previous turnout, the demographic and real disposible income data based on each year[^7]. This was primarily to ensure that past turnout data did not completely overwhelm everything else, as it was on a completely different order of magnitude. I intentionally did not scale the polling data, because I needed the variances in raw form to incorporate into the model later. 
+
+
 [^1]: There are some assumptions that should hold for a variable to be distributed poisson, and I believe that most of them should hold. The first is that individual votes being cast happens independently from one another (for example, me casitng a vote does not make you in particular any more or less likely to cast a vote). Second, the mean should be roughly equal to the variance, which in this case it is not. The mean of total votes cast is roughly $2*10^7$, while the variance is roughly $5.6*10^12$, meaning that we have overdispersion. For simplicity in the simulation process, I decided to stick with using a poisson regression, even if it does mean that the variance in turnout will be lower. 
 
 [^2]: In general, states that are more competitive see surges in turnout. See [Li et Al. (2018)](https://www-liebertpub-com.ezp-prod1.hul.harvard.edu/doi/pdf/10.1089%2Felj.2017.0478) and [Bursztyn et Al. (2017)](https://www.nber.org/system/files/working_papers/w23490/w23490.pdf).
 
-[^3]: A model that is just the mean predictor. 
+[^3]: A model that is just the mean outcome variable.  
 
 [^4]: As discussed previously, [incumbency matters](incumbency.html) a great deal. To account for this, I split the data and generate two seperate models - one for candidates from the incumbent party, and a second for the challenger party. As explored last week, this performs roughly as well as party based two sided models. One thing to note is that it is by party status, rather than for the candidates. Some models, like Abramowitz's [time for change model](https://pollyvote.com/en/components/models/retrospective/fundamentals-plus-models/time-for-change-model/), which has been quite successful only use actual incumbency status. 
 
-[^5]: One thing to note about this is that another way to measure uncertainty would have been to use the standard deviations from each state in individual polls, rather than in the average. I decided against this because individual polls can be quite noisy, and poll aggregators like 538 do a good job of putting together a trend line that removes a lot of the noise. 
+[^5]: See [Achen and Bartels (2017)](https://muse-jhu-edu.ezp-prod1.hul.harvard.edu/book/64646) for further evidence of this claim.
 
-[^6]: See G. Elliot Morris, Nate Cohn, and Nate Silver's twitter feeds for examples, along with thisi [blog post](https://statmodeling.stat.columbia.edu/2020/08/31/problem-of-the-between-state-correlations-in-the-fivethirtyeight-election-forecast/) from Andrew Gelman.
+[^6]: One thing to note about this is that another way to measure uncertainty would have been to use the standard deviations from each state in individual polls, rather than in the average. I decided against this because individual polls can be quite noisy, and poll aggregators like FiveThirtyEight do a good job of putting together a trend line that removes a lot of the noise. 
+
+[^7]: See G. Elliot Morris, Nate Cohn, and Nate Silver's twitter feeds for examples, along with thisi [blog post](https://statmodeling.stat.columbia.edu/2020/08/31/problem-of-the-between-state-correlations-in-the-fivethirtyeight-election-forecast/) from Andrew Gelman.
+
+[^8]: So that within each year, the mean value is 0 and the standard deviation is 1. I did not scale the GDP as it would all be set to mean 0, as it was the same for all states. 

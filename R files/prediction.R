@@ -21,7 +21,7 @@ nat_popvote_df <- read_csv("../Data/popvote_1948-2016.csv")
 nat_poll_df    <- read_csv("../Data/pollavg_1968-2016.csv")
 
 state_popvote_df <- read_csv("../Data/popvote_bystate_1948-2016.csv") %>%
-  mutate(D_pv = D/total, R_pv = R/total, vote_margin = D_pv - R_pv)
+  mutate(D_pv = D/total, R_pv = R/total, vote_margin = abs(D_pv - R_pv))
 
 state_poll_df <- read_csv("../Data/pollavg_bystate_1968-2016.csv") %>% 
   filter(days_left <= 21) %>%
@@ -56,7 +56,7 @@ wide_polls <- state_poll_df %>% filter(party == "republican") %>%
 
 colnames(wide_polls) <- c("r_name","year", "state", "rep", "rep_poll","d_name", "dem", "dem_poll")
 
-wide_polls <- wide_polls %>% mutate(poll_margin = rep_poll - dem_poll) %>%
+wide_polls <- wide_polls %>% mutate(poll_margin = abs(rep_poll - dem_poll)) %>%
   dplyr::select("state", "year", "poll_margin")
 
 turnout_votes <- state_popvote_df %>% dplyr::select("state", "year", "total", "vote_margin") %>%
@@ -120,7 +120,7 @@ turnout_scaled <- turnout_scaled %>% filter(year > 1984) %>%
   mutate(last_vote_margin = dplyr::lag(vote_margin, k = 1, default = NA)) %>%
   mutate(last_turnout = dplyr::lag(total, k = 1, default = NA)) %>%
   ungroup() %>%
-  dplyr::select(state,VEP,total, year, poll_margin, num_pred) %>% group_by(state) %>% mutate_at(num_pred, scale) %>% 
+  dplyr::select(state,VEP,total, year, poll_margin, num_pred) %>% group_by(year) %>% mutate_at(num_pred, scale) %>% 
   ungroup() %>% mutate_at(vars(VEP), funs(round(.))) %>% ungroup() %>% filter(year > 1990)
 
 
@@ -259,18 +259,16 @@ pred_df <- pred_df %>% add_column(year = rep(2020, 102), total = NA, D = NA, R =
 reg_df$inc_party <- as.logical(reg_df$inc_party)
 reg_df$chl_party <- as.logical(reg_df$chl_party)
 
-vote_num <- c("gdp", "rdi_q2", "Asian",
+vote_num <- c("rdi_q2", "Asian",
               "Black", "Hispanic", "Indigenous", "White", "Female", "Male", "age20",
               "age3045", "age4565", "age65")
 
 full_votes <- rbind(reg_df, pred_df) %>% dplyr::select(-incumbent,-inc_party, -chl_party) %>%
   mutate(inc_party = incumbent_party, chl_party = !incumbent_party) %>% 
-  group_by("state") %>%
+  group_by(year) %>%
   mutate_at(vote_num, scale) %>% ungroup() %>%
   left_join(turnout_scaled %>% dplyr::select(state, year, last_vote_margin), by = c("state" = "state", "year" = "year"))
 
-colnames(full_votes)[38] <- "drop"  
-full_votes$drop <- NULL
 
 ## build vote share model
 inc_vote_model <- glm(cbind(inc_votes, total - inc_votes) ~ rdi_q2 + gdp + state + 
