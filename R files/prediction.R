@@ -558,15 +558,23 @@ pop_vote_plot <- avg_popvote_state %>%
        fill = "") +
   scale_fill_manual(values=c("#619CFF", "#CCCCCC", "#F8766D"), breaks = c("Biden", "N/A", "Trump"))
 
-avg_popvote_state %>% mutate(margin = trump_pv - biden_pv) %>%
-  ggplot(aes(state = state, fill = margin)) + 
-  geom_statebins() + theme_statebins() +
-  labs(title = "2020 Presidential Election Margins", subtitle = "From 10000 Simulations",
-                                              fill = "Trump Popular Vote Margin") +
-  scale_fill_gradientn(
-    colors = c("blue", "white", "red"),
-    breaks = c(-75,0,75),
-    labels = c(-75,0,75))
+avg_popvote_state <- avg_popvote_state %>% mutate(margin = trump_pv - biden_pv) 
+
+plot_usmap(data = avg_popvote_state, regions = "states", values = "margin", labels = TRUE) +
+  scale_fill_gradient2(
+    high = "red", 
+    mid = "white",
+    low = "blue", 
+    breaks = c(-0.50,0,0.50), 
+    limits = c(-0.50,0.50),
+    name = "Trump Popular Vote Margin"
+  ) +
+  theme_void() +
+  theme(strip.text = element_text(size = 12),
+        aspect.ratio=1) + labs(title = "2020 Presidential Election Based on Average Popular Vote Share",
+                               subtitle = "From 10000 Simulations",
+                               fill = "")
+
 
 
 

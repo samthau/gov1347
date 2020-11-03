@@ -590,7 +590,47 @@ pv_plot <- gridExtra::grid.arrange(trump_pv_plot, biden_pv_plot, ncol = 2)
 pv_plot
 ```
 
-This plot shows Biden with a commanding lead in the national popular vote, winning above 50% of the vote in essentially every contest. There is an electoral college and popular vote split in `r pop_vote_split` of the 10,000 contests, meaning that Trump only wins when he happens to win the popular vote. Texas and South Carolina coming down to razor thin margins fits with the heavily Democrat leaning national enviornment.
+This plot shows Biden with a commanding lead in the national popular vote, winning above 50% of the vote in essentially every contest. There is an electoral college and popular vote split in `r pop_vote_split` of the 10,000 contests, meaning that Trump only wins when he happens to win the popular vote. Texas and South Carolina coming down to razor thin margins fits with the heavily Democrat leaning national enviornment. However, in some senses, looking at the average election outcomes is deceptive. A number of races in battleground states are actually predicted to be quite close.
+
+```{r echo = FALSE, return = FALSE, warning = FALSE, message = FALSE, results='hide'}
+state_pv <- results_df %>% 
+  mutate(biden_pv= biden_v/(biden_v+trump_v), trump_pv = trump_v/(biden_v+trump_v)) 
+
+biden_pv_clean <- state_pv %>% dplyr::select(state, sim, biden_pv)
+biden_pv_clean$candidate <- c("Biden")
+trump_pv_clean <- state_pv %>% dplyr::select(state, sim, trump_pv)
+trump_pv_clean$candidate <- c("Trump")
+
+colnames(biden_pv_clean) <- c("state", "sim", "popvote", "candidate")
+colnames(trump_pv_clean) <- c("state", "sim", "popvote", "candidate")
+
+state_pv_clean <- rbind(biden_pv_clean, trump_pv_clean)
+
+battle_states <- c("AZ", "FL", "GA", "IA", "ME", "MI", "MN", "NC", "NE", "NH","NV", "OH", 
+                   "PA", "TX","SC", "WI")
+
+state_pv_clean %>% filter(state %in% battle_states) %>%
+  ggplot(aes( x = popvote, fill = candidate, color = candidate)) +
+  facet_wrap(facets = state ~.) +
+  geom_density(alpha = 0.5) + 
+  labs(title = "Density of Simulated Vote Share in Battleground States",
+                        subtitle = "From 10000 Simulations",
+                        fill = "",
+       x = "Popular Vote Share", y = "Frequency") +
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank(), 
+        axis.line = element_line(colour = "grey"),
+        legend.key = element_rect(fill="transparent", colour=NA)) + 
+  scale_fill_manual(name = "Candidate Vote Share",values=c("dodgerblue2", "firebrick2"), labels = c("Biden", "Trump")) + 
+  scale_color_manual(name = "Candidate Vote Share",values = c("deepskyblue", "firebrick"),labels = c("Biden", "Trump")) + xlim(0,1)
+  
+
+```
+
+Given how close some of the state elections are supposed to be, in states like Ohio or Iowa, how can this model be so certain in predicting that Biden wins the election? The answer is the state to state correlation in outcomes. In elections where Biden narrowly wins Pennsylvannia, he is likely to do poorly in Ohio, because the states are relatively similar. However, Biden is predicted to win Pennsylvannia relatively comfortably, so on average he is likely to win Ohio as well. 
+
+This also speaks to another phenomenon that gives Biden a massive advantage: he was many paths to winning the election. Because Biden is favored in so many states, he could lose Georgia or Arizona and still comfortably win the election.
 
 ## Initial Model Assessment
 While this model is much more sophisticated than anything else that I have built this past semester, I think it is still flawed. While the state to state correlation and national polling error terms are the most interesting model I have built, I did not spend much time fine tuning them. State to state correlation is certainly something I wish I spent more time on, as this is a feature that is notoriously hard to get right[^8]. I also wish I had the chance to run the full model on previous elections, conducting yet another round of out of sample validation. It would be interesting to see how this model performs with data that do not suggest a blowout election. One other note is that this model seems to understate the value of the electoral college - other models that I have seen do have the possibility of a electoral college and popular vote victor split, which did not occur here.
@@ -598,6 +638,8 @@ While this model is much more sophisticated than anything else that I have built
 All in all, this model gives Biden an extremely high chance of victory, which does make sense given the national environment This model is quite certain of the victory, but everyone should remember that events with small probabilities do happen occasionally, no matter how small the probability is. For example, the rouhgly 0.1% chance that my model gives Trump is roughly the chance of three randomly selected people all being left handed. Also, frankly, I think my model is way too certain. I think further experimentation with variable selection might introduce more uncertainty, or changing how polling variance is thought of. 
 
 What this model suggests is that for Donald Trump to win re-election, he needs a massive polling error in his favor, or he needs courts to allow him to conduct extra-legal shenanigans that throw out votes. One final thing to remember is this: all models are wrong, but some models are useful. Undoubtedly, this model will be wrong in the exact votes, but it can still tell us that Biden has a very, very good chance of victory. 
+
+
 
 ## Appendix: Data
 Data for this model came from a number of places. In some situations, I also scaled some of the data so that different measures had approximately the same magnitude. 
