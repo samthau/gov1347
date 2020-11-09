@@ -10,6 +10,8 @@ library(reshape2)
 library(apcluster)
 library(MASS)
 library(stabledist)
+library(lubridate)
+
 
 
 
@@ -348,11 +350,31 @@ biden_pred <- as.data.frame(predict(chl_vote_model, biden_df, type = "response")
 biden_pred$state <- biden_df$state
 colnames(biden_pred) <- c("vote_share", "state")
 
+## load in atlernate variances
+pres_polls <- read.csv("../Data/president_polls.csv") %>% 
+  mutate(state = state.abb[match(state, state.name)],
+         party = case_when(candidate_name == "Donald Trump" ~ "republican",
+                           candidate_name == "Joseph R. Biden Jr." ~ "democrat"),
+         end_date = mdy(end_date),
+         poll_date = as.Date(end_date, "%m/%d/%Y"),
+         election_date = mdy(election_date),
+         days_left = round(difftime(election_date, poll_date, unit="days")),
+         weeks_left = round(difftime(election_date, poll_date, unit="weeks"))) %>%
+  filter(!is.na(party))
+
+poll_var_edited <- pres_polls %>% filter(days_left <= 21) %>%
+  group_by(state, party) %>% summarize(poll_var = sd(pct/100))
+na.omit(poll_var_edited)
+
+poll_var_dc <- poll_2020_var %>% filter(state == "DC")
+poll_var_full <- rbind(poll_var_edited, poll_var_dc)
+
+
 ## attach variances
-trump_pred_df <- data.frame(trump_pred) %>% left_join(poll_2020_var %>% filter(party == "republican"), 
+trump_pred_df <- data.frame(trump_pred) %>% left_join(poll_var_full %>% filter(party == "republican"), 
                                           by = c("state" = "state"))
 
-biden_pred_df <- data.frame(biden_pred) %>% left_join(poll_2020_var %>% filter(party == "democrat"), 
+biden_pred_df <- data.frame(biden_pred) %>% left_join(poll_var_full %>% filter(party == "democrat"), 
                                                       by = c("state" = "state"))
 
 
@@ -459,7 +481,7 @@ results_df <- results_df %>% mutate(win = case_when(trump_v > biden_v ~ "Trump",
                                                     trump_v < biden_v ~ "Biden",
                                                     trump_v == biden_v ~ "Tie"))
 
-write.csv(results_df, "../Data/prediction.csv")
+write.csv(results_df, "../Data/prediction_highvar.csv")
 
 ec_results <- aggregate(results_df$EC, results_df %>% dplyr::select(win, sim), FUN = sum)
 biden_pv <- aggregate(results_df$biden_v, results_df %>% dplyr::select(sim), FUN = sum)
@@ -560,29 +582,58 @@ pop_vote_plot <- avg_popvote_state %>%
 
 avg_popvote_state <- avg_popvote_state %>% mutate(margin = trump_pv - biden_pv) 
 
-plot_usmap(data = avg_popvote_state, regions = "states", values = "margin", labels = TRUE) +
+plot_usmap(data = avg_popvote_state, regions = "states", values = "margin") +
   scale_fill_gradient2(
-    high = "red", 
+    high = "firebrick2", 
     mid = "white",
-    low = "blue", 
+    low = "dodgerblue2", 
     breaks = c(-0.50,0,0.50), 
     limits = c(-0.50,0.50),
     name = "Trump Popular Vote Margin"
   ) +
   theme_void() +
   theme(strip.text = element_text(size = 12),
-        aspect.ratio=1) + labs(title = "2020 Presidential Election Based on Average Popular Vote Share",
+        aspect.ratio=1, legend.position = "bottom") + labs(title = "2020 Presidential Election Based on Average Popular Vote Share",
                                subtitle = "From 10000 Simulations",
-                               fill = "")
+                               fill = "") 
+ggsave("avg_pop_vote_map.png")
 
 
-
-
-state_count <- results_df %>% group_by(state) %>% count(win)
+sstate_count <- results_df %>% group_by(state) %>% count(win)
 
 ec_wins <- ec_results %>% spread(win, x) %>% mutate(winner = case_when(Biden > Trump ~ "Biden", 
                                                                        Trump > Biden ~ "Trump", 
                                                                        Biden == Trump ~ "Tie"))
+
+state_pv <- results_df %>% 
+  mutate(biden_pv= biden_v/(biden_v+trump_v), trump_pv = trump_v/(biden_v+trump_v)) 
+
+biden_pv_clean <- cbind.data.frame(state_pv %>% dplyr::select(state, sim, biden_pv), rep("Biden", count) )
+trump_pv_clean <- cbind.data.frame(state_pv %>% dplyr::select(state, sim, trump_pv), rep("Trump", count) )
+
+colnames(biden_pv_clean) <- c("state", "sim", "popvote", "candidate")
+colnames(trump_pv_clean) <- c("state", "sim", "popvote", "candidate")
+
+state_pv_clean <- rbind.data.frame(biden_pv_clean, trump_pv_clean)
+
+battle_states <- c("AZ", "FL", "GA", "IA", "ME", "MI", "MN", "NC", "NE", "NH","NV", "OH", 
+                   "PA", "TX","SC", "WI")
+
+state_pv_clean %>% filter(state %in% battle_states) %>%ggplot(aes( x = popvote, fill = candidate, color = candidate)) +
+  facet_wrap(facets = state ~.) +
+  geom_density(alpha = 0.5) + 
+  labs(title = "Density of Simulated Vote Share in Battleground States",
+                        subtitle = "From 10000 Simulations",
+                        fill = "",
+       x = "Popular Vote Share", y = "Frequency") +
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank(), 
+        axis.line = element_line(colour = "grey"),
+        legend.key = element_rect(fill="transparent", colour=NA)) + 
+  scale_fill_manual(name = "Candidate Vote Share",values=c("dodgerblue2", "firebrick2"), labels = c("Biden", "Trump")) + 
+  scale_color_manual(name = "Candidate Vote Share",values = c("deepskyblue", "firebrick"),labels = c("Biden", "Trump")) + xlim(0,1)
+ggsave("battleground.png")
 
 
 victors <- ec_wins %>% group_by(winner) %>% count()
