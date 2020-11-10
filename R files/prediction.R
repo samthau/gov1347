@@ -638,4 +638,5 @@ ggsave("battleground.png")
 
 victors <- ec_wins %>% group_by(winner) %>% count()
 
+most_often_results <- ec_wins %>% group_by(Biden) %>% count()
 
