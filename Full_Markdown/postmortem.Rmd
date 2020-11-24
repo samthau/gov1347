@@ -1,0 +1,532 @@
+---
+title: "Model Postmortem"
+author: "Samuel Thau"
+date: "11/22/2020"
+output:
+  rmarkdown::html_document:
+    theme: cerulean
+    
+knit: (function(inputFile, encoding) {
+  rmarkdown::render(inputFile, encoding = encoding, output_dir = "../Posts/") })    
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(ggplot2)
+library(usmap)
+library(janitor)
+library(usmap)
+library(data.table)
+library(geofacet) ## map-shaped grid of ggplots
+library(statebins)
+
+results_df <- read.csv("../Data/prediction.csv")
+
+ec_results <- aggregate(results_df$EC, results_df %>% dplyr::select(win, sim), FUN = sum)
+biden_pv <- aggregate(results_df$biden_v, results_df %>% dplyr::select(sim), FUN = sum)
+trump_pv <- aggregate(results_df$trump_v, results_df %>% dplyr::select(sim), FUN = sum)
+
+avg_popvote_state <- results_df %>% mutate(trump_pv = trump_v/(trump_v+biden_v),
+                                           biden_pv = biden_v/(trump_v+biden_v)) %>%
+  group_by(state) %>%
+  summarize(trump_pv = mean(trump_pv), biden_pv = mean(biden_pv)) %>%
+  mutate(win = case_when(trump_pv > biden_pv ~ "Trump",
+                         biden_pv > trump_pv ~ "Biden"))
+
+avg_popvote_table <- avg_popvote_state %>% dplyr::select(state, trump_pv, biden_pv)
+colnames(avg_popvote_table) <- c("State", "Trump Popular Vote", "Biden Popular Vote")
+
+
+ec_wins <- ec_results %>% spread(win, x) %>% mutate(winner = case_when(Biden > Trump ~ "Biden", 
+                                                                       Trump > Biden ~ "Trump", 
+                                                                       Biden == Trump ~ "Tie"))
+
+victors <- ec_wins %>% group_by(winner) %>% count()
+
+actual_results <- read_csv("../Data/popvote_bystate_1948-2020.csv")
+results_2020 <- actual_results %>% filter(year == 2020)
+results_2020$state <- c(state.abb, 'DC')[match(results_2020$state, c(state.name, 'District of Columbia'))]
+results_2020 <- results_2020 %>% mutate(biden_pv = D/total, 
+                                        trump_pv = R/total, 
+                                        winner =case_when(biden_pv > trump_pv ~ "Biden",
+                                                          trump_pv > biden_pv ~ "Trump",
+                                                          biden_pv == trump_pv ~ "Tie"))
+
+
+biden_df <- results_2020 %>% dplyr::select(state, biden_pv) %>% 
+  left_join(avg_popvote_state %>% dplyr::select(state,biden_pv), by = c("state" = "state"))
+colnames(biden_df) <- c("state", "actual", "predicted")
+
+trump_df <- results_2020 %>% dplyr::select(state, trump_pv) %>% 
+  left_join(avg_popvote_state %>% dplyr::select(state,trump_pv), by = c("state" = "state"))
+colnames(trump_df) <- c("state", "actual", "predicted")
+
+check_results <-  results_df %>% 
+  left_join(results_2020 %>% dplyr::select(state, winner), by = c("state" = "state")) %>%
+  mutate(correct = case_when(win == winner ~ 1, win != winner ~ 0))
+
+```
+
+## Introduction: Reviewing the Model
+It's been nearly three weeks since the election, and it seems we finally have results (even if many do not accept them). It has come time to assess how my model at predicting the election. To start, I'll remind you of the model that I built. There were four parts:
+
+1. Estimating turnout via a poisson regression
+
+2. Estimating vote share for each candidate using a two sided binomial regression
+
+3. Estimating a national polling error based on polling averages from past data
+
+4. Converting the information from steps 1-3 into probability distributions, and then making draws to simulate election outcomes. Turnout was distirbuted as a poisson random variable, vote share as multivariate normal (with covariance between states based on a scaled similarity matrix), and national polling error as two stable distributions. 
+
+We can look at the map of the average electoral college over 10,000 simulations, and compare it to the actual results. 
+
+## Classification
+
+```{r echo = FALSE, return = FALSE, warning = FALSE, message = FALSE, results='hide'}
+pred_map <- avg_popvote_state %>% 
+  ggplot(aes(state = state, fill = fct_relevel(win, "Trump", "Biden"))) +
+  geom_statebins() +
+  theme_statebins() +
+  labs(title = "2020 Presidential Election Based on Average Popular Vote Share",
+       subtitle = "From 10000 Simulations",
+       fill = "") +
+  scale_fill_manual(values=c("#619CFF", "#CCCCCC", "#F8766D"), breaks = c("Biden", "N/A", "Trump"))
+
+
+real_map <- results_2020 %>% 
+  ggplot(aes(state = state, fill = fct_relevel(winner, "Trump", "Biden"))) +
+  geom_statebins() +
+  theme_statebins() +
+  labs(title = "Actual Outcomes of the 2020 Election",
+       fill = "") +
+  scale_fill_manual(values=c("#619CFF", "#CCCCCC", "#F8766D"), breaks = c("Biden", "N/A", "Trump"))
+
+pred_map
+real_map
+
+```
+
+I incorrectly predicted five states: Iowa, North and South Carolina, Ohio, and Florida. I'm honestly not particularly surprised about South Carolina, given that based on conventional wisdom it was unlikely for Biden to win the state. My incorrect predictions in Iowa and Ohio are tied together - Biden winning both would be an indicator of a very strong performance overall, which did not happen. They are also tied to South Carolina being predicted incorrectly, as South Carolina could only be in play if Biden won in a landslide. 
+
+That leaves Florida and North Carolina, which many forecasts missed. This includes models like [FiveThirtyEight](https://projects.fivethirtyeight.com/2020-election-forecast/) and [The Economist](https://projects.economist.com/us-2020-forecast/president), two of the more sophisticated models out there. In my model, Biden's decisive wins in those states were a symptom of the overall prediction, a Biden blowout. 
+
+By about 10 pm on election night, it was clear that was not going to happen. It was immediately clear that my model was wrong, it was just going to be a question of how much, and if the actual results fell within the predicted range of outcomes. One interesting thing to look at is the distribution of classification accuracies: as it turns out, the model was never exactly right.
+
+```{r echo = FALSE, return = FALSE, warning = FALSE, message = FALSE, results='hide'}
+class_accuracy <- aggregate(check_results$correct, by=list(sim=check_results$sim), FUN=sum) 
+
+accuracy_hist <- ggplot(class_accuracy, aes(x = x), alpha = 0.75) +
+  geom_histogram(bins = max(class_accuracy$x) - min(class_accuracy$x), 
+                 aes(y = ..density..),position = 'identity', , fill = "forestgreen") + 
+  labs(x="Number of States Predicted Correctly", y="Frequency") + 
+  scale_fill_manual(values=c("firebrick2")) + 
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank(), 
+        axis.line = element_line(colour = "grey"),
+        legend.key = element_rect(fill="transparent", colour=NA),
+        legend.position = "none")+
+  labs(title = "Classification Accuracy For Each Simulation") 
+accuracy_hist
+```
+
+In fact, the maximum classification accuracy was 49 out of 51 states (including DC), which strikes me as doing quite poorly for a probabilistic model. One would hope that the model would get the exactly right results at least some of the time, and that was not the case for this model. One thing to note is the relatively large probability mass below 45 states predicted correctly - it suggests there is something causing large groups of states to be wrong all together. 
+
+## The Predicted Range
+In the end, Biden won the election with 306 electoral votes to Trump's 232. We can look at the distribution of electoral results predicted by the model, and see where those results fall. The dashed lines are the actual electoral college vote counts for each candidate.
+
+```{r echo = FALSE, return = FALSE, warning = FALSE, message = FALSE, results='hide'}
+biden_ec_plot <- ggplot(ec_results %>% filter(win == "Biden"), aes(x = x, fill = win), alpha = 0.75 ) +
+  geom_density(alpha =0.25, color = "dodgerblue2") +
+  geom_histogram(bins = max(ec_results$x) - min(ec_results$x), aes(y = ..density..),position = 'identity') + 
+  labs(x="Electoral College Results", y="Frequency", color = "Legend") + ggtitle("Predicted Electoral College Results") + 
+  scale_fill_manual(values=c("dodgerblue2")) + 
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank(), 
+        axis.line = element_line(colour = "grey"),
+        legend.key = element_rect(fill="transparent", colour=NA),
+        legend.position = "none")+
+  scale_color_manual(values=c("deepskyblue")) + 
+  labs(title = "Biden Electoral College Votes from 10000 Simulations") + xlim(0,538) + 
+  geom_vline(linetype = "dashed", xintercept = 306)
+
+
+trump_ec_plot <- ggplot(ec_results %>% filter(win == "Trump"), aes(x = x, fill = win), alpha = 0.75 ) +
+  geom_density(alpha =0.25, color = "firebrick2") +
+  geom_histogram(bins = max(ec_results$x) - min(ec_results$x), aes(y = ..density..),position = 'identity') + 
+  labs(x="Electoral College Results", y="Frequency", color = "Legend") + ggtitle("Predicted Electoral College Results") + 
+  scale_fill_manual(values=c("firebrick2")) + 
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank(), 
+        axis.line = element_line(colour = "grey"),
+        legend.key = element_rect(fill="transparent", colour=NA),
+        legend.position = "none")+
+  scale_color_manual(values=c("firebrick")) + 
+  labs(title = "Trump Electoral College Votes from 10000 Simulations") + xlim(0,538) + 
+  geom_vline(linetype = "dashed", xintercept = 232)
+
+ec_plot <- gridExtra::grid.arrange(trump_ec_plot, biden_ec_plot)
+
+```
+
+The actual results were on the lower extreme of predicted outcomes for Biden, and on the upper extreme of predicted outcomes for Trump. This is consistent with the story from the maps - the model predicted a Biden blowout which did not come to pass.  
+
+## State Level Accuracy
+We can also look to see how I did at predicting the state level outcomes, both the turnout and the vote share for each candidate. We can begin with the vote shares. 
+
+```{r echo = FALSE, return = FALSE, warning = FALSE, message = FALSE, results='hide'}
+biden_state_vote <- ggplot(biden_df, aes  (x = predicted, y = actual, label = state)) + 
+  geom_text() + 
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed") + 
+  geom_smooth(method = "lm", se = FALSE, color = "deepskyblue") + 
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank(), 
+        axis.line = element_line(colour = "grey"),
+        legend.key = element_rect(fill="transparent", colour=NA),
+        legend.position = "none",
+        plot.title = element_text(size=12)) +
+  labs(x = "Predicted Biden Vote Share", y="Actual Biden Vote Share", title = "Predicted vs Actual Biden Popular Vote")
+
+trump_state_vote <- ggplot(trump_df, aes  (x = predicted, y = actual, label = state)) + 
+  geom_text() + 
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed") + 
+  geom_smooth(method = "lm", se = FALSE, color = "firebrick") + 
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank(), 
+        axis.line = element_line(colour = "grey"),
+        legend.key = element_rect(fill="transparent", colour=NA),
+        legend.position = "none",
+        plot.title = element_text(size=12)) + 
+  labs(x = "Predicted Trump Vote Share", y="Actual Trump Vote Share", title = "Predicted vs Actual Trump Popular Vote")
+
+
+state_votes <- gridExtra::grid.arrange(biden_state_vote, trump_state_vote, ncol = 2)
+
+```
+
+The dashed lines represent the 45 degree line, which corresponds to a perfect prediction. The red and blue lines correspond to the trend line for the actual versus predicted values. We can see that the model tended to underestimate both Trump and Biden in states they won handily[^1]. Given the clustering of this data, it is a little bit difficult to read, so we can look at the same information in map form. These secondary plots also give us a better sense of how badly the model missed some states, on average. 
+
+```{r echo = FALSE, return = FALSE, warning = FALSE, message = FALSE, results='hide'}
+
+biden_df <- biden_df %>% mutate(margin = predicted - actual)
+trump_df <- trump_df %>% mutate(margin = predicted - actual)
+
+biden_margin_map <- plot_usmap(data = biden_df, regions = "states", values = "margin") +
+  scale_fill_gradient2(
+    high = "firebrick2", 
+    mid = "white",
+    low = "dodgerblue2", 
+    breaks = c(-0.15,0,0.15), 
+    limits = c(-0.15,0.15),
+    name = "Biden Margin"
+  ) +
+  theme_void() +
+  theme(strip.text = element_text(size = 12),
+        aspect.ratio=1, legend.position = "bottom",
+        plot.title = element_text(size=12)) + 
+  labs(title = "Biden Vote Margins, Predicted Minus Actual", fill = "") 
+
+trump_margin_map <- plot_usmap(data = trump_df, regions = "states", values = "margin") +
+  scale_fill_gradient2(
+    high = "dodgerblue2", 
+    mid = "white",
+    low = "firebrick2", 
+    breaks = c(-0.15,0,0.15), 
+    limits = c(-0.15,0.15),
+    name = "Trump Margin"
+  ) +
+  theme_void() +
+  theme(strip.text = element_text(size = 12),
+        aspect.ratio=1, legend.position = "bottom",
+        plot.title = element_text(size=12)) + 
+  labs(title = "Trump Vote Margins, Predicted Minus Actual", fill = "") 
+
+state_votes <- gridExtra::grid.arrange(biden_margin_map, trump_margin_map, ncol = 2)
+
+
+```
+
+The color schemes are intentionally inverted between the maps, so that red represents a shift away from Biden or towards Trump, and blue represents a shift towards Biden or away from Trump. We can see that the map is relatively uniformly red, indicating a wide spread miss by the model in Biden's favor. Also, note the gradient: there are blocks of states that show a wider miss in favor of Trump in the midwest and south. 
+
+One other interesting thing to note is that overall, my model was more accurate for predicted Trump's vote shares than Biden's. There are two possible explanations for this phenomenon: first, the underlying model for incumbents had a better fit than for challengers, and second, the data suggested a better result for Biden than in reality. In my [predictions post](prediction.html), you can see that the residual deviance for the challenger model, which was used to predict Biden's vote shares is higher than for the incumbent model, which was used to predict Trump's vote shares. 
+
+We can also look at the predicted turnout against the actual turnout. For the predicted values, I am using the predicted values from the poisson regression, which were used as the mean and variance of the poisson draws to simulate turnout. 
+
+```{r echo = FALSE, return = FALSE, warning = FALSE, message = FALSE, results='hide'}
+nat_popvote_df <- read_csv("../Data/popvote_1948-2016.csv")
+nat_poll_df    <- read_csv("../Data/pollavg_1968-2016.csv")
+
+state_popvote_df <- read_csv("../Data/popvote_bystate_1948-2016.csv") %>%
+  mutate(D_pv = D/total, R_pv = R/total, vote_margin = abs(D_pv - R_pv))
+
+state_poll_df <- read_csv("../Data/pollavg_bystate_1968-2016.csv") %>% 
+  filter(days_left <= 21) %>%
+  group_by(year, state, candidate_name, party) %>%
+  dplyr::summarize(avg_poll = mean(avg_poll)/100) %>% 
+  dplyr::select(year, state, party, avg_poll)
+
+state_poll_df$state <- c(state.abb, 'DC')[match(state_poll_df$state, c(state.name, 'District of Columbia'))]
+state_popvote_df$state <- c(state.abb, 'DC')[match(state_popvote_df$state, c(state.name, 'District of Columbia'))]
+
+nat_econ <- read_csv("../Data/econ.csv")
+state_rdi <- read_csv("../Data/state_rdi.csv")
+vep_df <- read_csv("../Data/vep_1980-2016.csv")
+vep_df$state <- c(state.abb, 'DC')[match(vep_df$state, c(state.name, 'District of Columbia'))]
+
+
+demo <- read_csv("../Data/demographic_1990-2018.csv") %>% dplyr::select(-total)
+
+cost <- read.delim("../Data/covi_1996-2016.txt", header = TRUE, sep = "|", stringsAsFactors = FALSE)
+colnames(cost) <- c("state", "1996", "2000", "2004", "2008", "2012", "2016")
+cost_df <- melt(cost, 
+                id.vars = c("state"), 
+                value.name = "year")
+colnames(cost_df) <- c("state", "year", "cost")
+dc_cost <- cbind(rep('DC', 6), seq(from = 1996, to = 2016, by = 4), rep(0,6))
+colnames(dc_cost) <- c("state", "year", "cost")
+cost_df <- rbind(cost_df, dc_cost)
+cost_df$year <- as.numeric(as.character(cost_df$year))
+
+wide_polls <- state_poll_df %>% filter(party == "republican") %>% 
+  left_join(state_poll_df %>% filter(party == "democrat"), by = c("state", "year"))
+
+colnames(wide_polls) <- c("r_name","year", "state", "rep", "rep_poll","d_name", "dem", "dem_poll")
+
+wide_polls <- wide_polls %>% mutate(poll_margin = abs(rep_poll - dem_poll)) %>%
+  dplyr::select("state", "year", "poll_margin")
+
+turnout_votes <- state_popvote_df %>% dplyr::select("state", "year", "total", "vote_margin") %>%
+  left_join(wide_polls %>% dplyr::select("state", "year", "poll_margin"))
+
+turnout_df <- turnout_votes %>%
+  left_join(demo, by = c("state" = "state", "year" = "year")) %>%
+  left_join(cost_df, by = c("state" = "state", "year" = "year")) %>%
+  left_join(vep_df, by = c("state" = "state", "year" = "year"))
+
+## Load 2020 polling data
+poll_2020_df <- read_csv("../Data/presidential_poll_averages_2020.csv")
+
+elxnday_2020 <- as.Date("11/3/2020", "%m/%d/%Y")
+dnc_2020 <- as.Date("8/20/2020", "%m/%d/%Y")
+rnc_2020 <- as.Date("8/27/2020", "%m/%d/%Y")
+
+colnames(poll_2020_df) <- c("year","state","poll_date","candidate_name","avg_support","avg_support_adj")
+
+poll_2020_df <- poll_2020_df %>%
+  mutate(party = case_when(candidate_name == "Donald Trump" ~ "republican",
+                           candidate_name == "Joseph R. Biden Jr." ~ "democrat"),
+         poll_date = as.Date(poll_date, "%m/%d/%Y")) %>%
+  mutate(days_left = round(difftime(elxnday_2020, poll_date, unit="days")),
+         weeks_left = round(difftime(elxnday_2020, poll_date, unit="weeks")),
+         before_convention = case_when(poll_date < dnc_2020 & party == "democrat" ~ TRUE,
+                                       poll_date < rnc_2020 & party == "republican" ~ TRUE,
+                                       TRUE ~ FALSE)) %>% filter(!is.na(party)) 
+
+poll_2020_clean <- poll_2020_df %>% filter(days_left <= 21) %>% 
+  group_by(state, candidate_name, party) %>%
+  summarize(avg_poll = mean(avg_support_adj)/100) %>% filter(state != "National") %>% 
+  dplyr::select(state, candidate_name, avg_poll, party) %>%
+  filter(state != "NE-1", state != "NE-2", state != "ME-1", state != "ME-2")
+
+wide_poll_2020 <- poll_2020_clean %>% filter(party == "democrat") %>% 
+  left_join(poll_2020_clean %>% filter(party == "republican"), 
+            by = c("state" = "state"))
+colnames(wide_poll_2020) <- c("state", "biden", "dem_poll", "dem", "trump", "rep_poll", "rep")  
+wide_poll_2020$state <- c(state.abb, 'DC')[match(wide_poll_2020$state, c(state.name, 'District of Columbia'))]
+poll_margin_2020 <- wide_poll_2020 %>% mutate(poll_margin = rep_poll - dem_poll) %>% 
+  dplyr::select(state, poll_margin)
+
+turnout_2020 <- poll_margin_2020 %>% 
+  left_join(demo %>% filter(year == 2018), by = c("state"= "state")) %>% 
+  dplyr::select(poll_margin, Asian, Black, Hispanic, Indigenous,
+                White, Female, Male, age20, age3045, age4565, age65) %>% 
+  add_column(vote_margin = NA) %>% add_column(cost = NA) %>% add_column(total = NA) %>% 
+  add_column(VEP = NA) %>% add_column(VAP = NA)
+turnout_2020$year <- rep(2020, 51)
+
+
+## scale predictors
+num_pred <- c("vote_margin", "Asian", "Black", "Hispanic", "Indigenous", "White", 
+              "Female", "Male", "age20", "age3045", "age4565", "age65",
+              "last_vote_margin", "last_turnout")
+
+turnout_scaled <- rbind(turnout_df, turnout_2020)
+turnout_scaled <- turnout_scaled %>% filter(year > 1984) %>% 
+  group_by(state) %>%
+  mutate(last_vote_margin = dplyr::lag(vote_margin, k = 1, default = NA)) %>%
+  mutate(last_turnout = dplyr::lag(total, k = 1, default = NA)) %>%
+  ungroup() %>%
+  dplyr::select(state,VEP,total, year, poll_margin, num_pred) %>% group_by(year) %>% mutate_at(num_pred, scale) %>% 
+  ungroup() %>% mutate_at(vars(VEP), funs(round(.))) %>% ungroup() %>% filter(year > 1990)
+
+
+##turnout model
+turnout_model <- glm(total ~ last_vote_margin + poll_margin +Black + Hispanic + 
+                       Asian + White + Male + age20 + age3045 + age4565 +
+                       last_turnout + state, 
+                     data = turnout_scaled %>% filter(year < 2020), family = "poisson")
+summary(turnout_model)
+turnout_pred_df <- turnout_scaled %>% filter(year == 2020)
+turnout_2020_pred <- as.data.frame(predict(turnout_model, turnout_pred_df, type = "response"))
+turnout_2020_pred$state <- turnout_pred_df$state
+colnames(turnout_2020_pred) <- c("turnout", "state")
+
+turnout_check <- turnout_2020_pred %>% 
+  left_join(results_2020 %>% dplyr::select(state, total), by = ("state" = "state")) %>% 
+  mutate(margin = turnout - total)
+
+turnout_plot <- ggplot(turnout_check, aes  (x = turnout, y = total, label = state)) + 
+  geom_text() + 
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed") + 
+  geom_smooth(method = "lm", se = FALSE, color = "black") + 
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank(), 
+        axis.line = element_line(colour = "grey"),
+        legend.key = element_rect(fill="transparent", colour=NA),
+        legend.position = "none") + 
+  labs(x = "Predicted Turnout", y="Actual Turnout", title = "Predicted vs Actual Turnout") +
+  scale_x_continuous(trans='log10') +
+  scale_y_continuous(trans='log10')
+turnout_plot
+```
+
+Again, the dashed line is the 45 degree line, indicating perfect prediction, and the solid line is the trend line of actual turnout regressed on predicted turnout. In this case, the error is almost uniform: the trend line is almost parallel to the 45 degree line. Also note that the turnout was uniformly higher than predicted. Given that this election had some of the [highest voter turnout in American history](https://www.washingtonpost.com/graphics/2020/elections/voter-turnout/), in large part due to the candidates and the messaging surrounding the election, it is not surprising that my model failed to capture the voting surge[^2].  
+
+## Model Statistics
+We can also look at a couple of statistics that give an overall sense of the model accuracy. 
+
+```{r echo = FALSE, return = FALSE, warning = FALSE, message = FALSE}
+turnout_RMSE = sqrt(sum((turnout_check$turnout - turnout_check$total) ** 2)/51)
+biden_RMSE = sqrt(sum((biden_df$margin)**2)/51)
+trump_RMSE = sqrt(sum((trump_df$margin)**2)/51)
+
+state_results <- results_df %>% group_by(state) %>% count(win)
+state_ratios <- state_results %>% filter(win == "Trump") %>% 
+  full_join(state_results %>% filter(win == "Biden"), by = c("state" = "state"))
+colnames(state_ratios) = c("state", "trump", "trump_wins", "biden", "biden_wins")
+state_ratios <- state_ratios %>% dplyr::select(state, trump_wins, biden_wins) %>% 
+  replace(is.na(.),0) %>%
+  mutate(trump_win_frac = trump_wins/10000, biden_win_frac = biden_wins/10000) %>%
+  left_join(results_2020 %>% dplyr::select(state, winner), by = c("state" = "state")) %>%
+  mutate(win_dummy = case_when(winner == "Trump" ~ 1, winner == "Biden" ~ 0))
+
+brier = sum((state_ratios$trump_win_frac - state_ratios$win_dummy) ** 2)/51
+
+stat_list <- c("Classification Accuracy","Turnout RMSE", "Biden RMSE", "Trump RMSE", "Brier Score")
+val <- c(46/51, turnout_RMSE, biden_RMSE, trump_RMSE, brier)
+
+model_stats <- cbind.data.frame(stat_list, val)
+colnames(model_stats) <- c("Model Statistic", "Value")
+model_stats$Value <- format(model_stats$Value, digits = 3, scientific = FALSE)
+# model_stats$Value[2] <- format(model_stats$Value[2], digits = 6)
+# model_stats$Value[3:5] <- format(model_stats$Value[3:5], digits = 3)
+
+library(kableExtra)
+kbl(model_stats)  %>% kable_paper(full_width = F) %>% kable_styling(position = "center")
+
+```
+
+The classification accuracy is good, but not great. The turnout root mean squared error is relatively large, which is to be expected based on the scale of the units: being off by an average of nine hundred thousand votes per state seems not out of the ordinary, given the massive turnout surge for this election. We can see that on average, the model was off by more for Biden than Trump with regards to vote shares, though they are relatively close. Between the two, they indicate an average swing of roughly five percentage points from Biden to Trump. 
+
+Finally, we have the Brier score for the model. The Brier score is a cost function for probabilistic models with binary outcomes: in this case, it takes in the probability of a candidate winning each state, and if they won the state. A lower Brier score is better: it means that the probabilities predicted were closer to the actual result. The model's brier score is relatively low, in large part because the majority of states were predicted to go one way or another with overwhelming odds. The largest Brier score contributions came from Florida, North Carolina, and Iowa, three states that the model was confident Biden would win that Trump carried. 
+
+## What Went Wrong?
+All in all, my model did not do a great job of predicting the election, no matter which way you cut it[^3]. So what happened? There are two sayings that I've heard about predictive modeling that sum up what I think went wrong:
+
+1. Garbage in, garbage out
+
+2. KISS: Keep it simple, stupid
+
+Once I explain what I mean by these sayings, it will give an overview of what went wrong with my model, and more importantly, why. 
+
+## Garbage In, Garbage Out
+This saying is a less polite way of saying that model is only as good as its data. Based on what evidence we have, it looks like there were definitely some problems with the data I was using. 
+
+On the day of the election, FiveThirtyEight projected Biden to win the national popular vote with 53.4 percent of the popular vote, with Trump winning 45.4 percent. My model predicted a slightly wider margin: 55.8 percent for Biden, and 44.2 for Trump on average. According to [Cook Political Report](https://cookpolitical.com/2020-national-popular-vote-tracker), Biden ended up winning 51.0 percent of the vote and Trump won 47.2 percent. 
+
+On the day of the election, the FiveThirtyEight model goes into "polls-only" mode, where it only relies on polling data to determine the forecast. Based on the margin from their forecast to the actual, the polls overestimated Biden by about two and a half percentage points, while Trump out performed his polls by about the same margin. When put into historical context, this is about the same size polling error as 2016. 
+
+In my model, the polls were a key input into estimating the mean popular vote shares for each candidate. For both the incumbent and challenger models, polling had the biggest impact on the output point prediction, as the coefficient on polling was an order of magnitude larger than the others. I also double dipped with the polls, and used the variances as well. Because polling was [relatively stable](https://fivethirtyeight.com/features/we-have-a-lot-of-new-polls-but-theres-little-sign-of-the-presidential-race-tightening/) the variances used to simulate individual elections was relatively small. Because the mean was off, there was no way to get lucky with a large variance. 
+
+Understanding why the polls were wrong is a complex task, and something that is outside of the scope of this model reflection. However, I'll include a couple of quick theories: 
+
+1. In states where the election is not close, the winner of the state tends to outperform polling. On average, this adds up and moves the popular vote average. 
+
+2. Partisan non-response bias: Republicans are less likely to pick up the phone as they are less trusting of the media
+
+3. COVID-19: Because Democrat leaning voters were more likely to take the pandemic seriously, they are more likely to be at home and therefore more likely to be polled. 
+
+There has also been a lot made of the changes in the how Hispanic people voted, but there is evidence that this phenomenon is really just a symptom to the [urban-rural political divide](https://fivethirtyeight.com/features/what-we-know-about-how-white-and-latino-americans-voted-in-2020/). All of this is to say, there's a lot more work to be done to figure out what went wrong with polling, and why. 
+
+Also in the garbage in, garbage out category is that in some cases, I was using somewhat outdated data. My demographic data was from 2018, and even slight shifts could be a big deal. It is also not clear that the economic data I used was the best choice. I used second quarter GDP quarter over quarter growth at a national level, which had one of the biggest declines in history due to the ongoing pandemic. At the same time, I used second quarter real disposable income growth, which had a massive spike due to the CARES Act. 
+
+All of this is to say, there were a lot of possible problems with just the data for my model. 
+
+## KISS
+Keeping it simple is often a good strategy for predictive modeling. Building a complex model introduces a lot of choices, which adds avenues for modeling *mistakes*. It means you need to take greater care, something that requires an immense amount of time, something I did not have enough of before the election. There are a host of issues that I think I did a poor job of addressing. 
+
+One worry is about overfitting, especially with such a small dataset - six elections is not a lot of data to work with[^4]. One method to avoid overfitting that I did not use was regularization. The basic idea behind regularization is that when you estimate a linear (or generalized linear) model, you add a cost term based on the magnitude of the coefficient values. This has the effect that some variables are reduced to having coefficients of 0, removing them from the model. Because parsimonious models tend to perform better with limited data, it may have been smart to regularize both the turnout and vote share models. I used a large number of predictors, and it may be that some had little actual impact. 
+
+There are two other crucial modeling errors that I believe hurt the performance of my model. 
+
+First, I recall that I simulated the national polling error for both parties as independent stable distributions. I intentionally picked stable distributions because they have fat-tails, meaning that larger polling errors are more likely. The problem here was independence. Because both parties beat their polling marks on average, both parties had an expectation of beating their polling average by about 2 percentage points[^5].
+
+I noted in a footnote in the model that the national polling error values actually have negative covariance, which makes a lot of sense. If one party beats their polls, that almost always means the other party underperformed. Because I was using independent distributions, this was not accounted for. 
+
+Second, I spent a lot of time getting covariance between the results from different states to work, but I did not spend enough time on this portion of the model. Something that I noticed in the histogram of the classification accuracy of my model was that in some cases, whole blocks of states were predicted wrong. My instinct is that this has to do with the correlation matrix I was using to predict vote shares. In my predictions post, I linked a [blog post](https://statmodeling.stat.columbia.edu/2020/08/31/problem-of-the-between-state-correlations-in-the-fivethirtyeight-election-forecast/) by Andrew Gelman, about how he believes that FiveThirtyEight did not handle state to state correlations well. The blog post I linked was not the only information on state to state correlation on Gelman's blog. In a [post critiquing strange behavior in the FiveThirtyEight model](https://statmodeling.stat.columbia.edu/2020/10/24/reverse-engineering-the-problematic-tail-behavior-of-the-fivethirtyeight-presidential-election-forecast/?fbclid=IwAR0kxzkJ9Gzgz98zCVy-BqeNLVSjZ65Zwy0a7acGL7Pe_SBM1qbW_oK0nVs), Gelman noticed that certain states had negative correlations between them. That led to this comment:
+
+*"Maybe there was a bug in the code, but more likely they just took a bunch of state-level variables and computed their correlation matrix, without thinking carefully about how this related to the goals of the forecast and without looking too carefully at what was going on."*
+
+Unfortunately for me, that's a very accurate description of what I did for my model. Gelman made the point that swings in vote shares between states generally should not have negative correlations, something that did occur in my model. In addition, for the biggest swing, Gelman makes the point that they should be national, something that I agree with. As mentioned previously, this is something that is correctable with more time, something I unfortunately did not have. Combined to the problems I had with national polling errors, this all is a recipe for some very strange behavior.  
+
+## Potential Checks
+While unfortunately I do not have time to actually conduct all of these checks, I'll hopefully take a look at a couple in a later post over Thanksgiving break. Below is a non-exhaustive list of everything I could think of to try to improve the model:
+
+1. Start by validating the current edition of the model on previous elections. For a number of reasons, this election was unique, and this would give a good sense of if the problems with my model were idiosyncratic to this year or a more consistent problem. Ideally, I would take a look at all the same accuracy metrics I looked at in this post. 
+
+2. Run the model with augmented polling data. A major question I have is how much more accurate the polls would have needed to be for my model to make an accurate prediction. I would start with a national polling error, and if that does not produce more accurate results, I would move on to augmenting particular states. For example, if polling had been more accurate in specifically Florida, could that help the model's overall accuracy?
+
+3. I would have checked to see if regularizing the model could have helped. My gut feeling is that yes, it would have, but I'd be very curious to see. 
+
+4. Make the national vote share errors correlated across the candidates, and see if that creates more accurate outcomes. Assuming independence was a short-sighted move on my part, especially given how things turned out.
+
+5. Rerun the model with variances for the polls based on the individual polls rather than the polling averages. This may have given a wider range of outcomes, that covered the actual election results. 
+
+6. Re-scale the correlation matrix so that all the values fall between 0 and 1, and try other ways to build a correlation matrix. My big takeaway from the blog post that I linked is that states generally should not have negative correlation - at the lowest, they should have no impact on each other. My instinct is that this would allow for more freedom between the southern and midwest states, which may allow the model to get Ohio, Florida, and North Carolina right. 
+
+While these are not exactly statistical tests, they would give evidence to show me if my instincts about the shortcomings of my model are correct. In general, assessing a model with so many parts is tricky, and is hard to do with a single test. Something overall for me to think about is how to make my model more mathematically rigorous, making sure that the data meets all the assumptions for all of the modeling choices I made early on. 
+
+## Hindsight is 2020
+I think there are some concrete changes that I would want to make for my model no matter the results of my tests, along with many things I should have done differently in hindsight. 
+
+1. Run all of the proposed tests, especially with the state to state correlation matrix. Running a series of robustness checks on the multiple ways I could have formulated the correlation matrix likely would have helped improve the model's overall accuracy, by making sure that states were coupled together in ways that make sense. 
+
+2. Make the national vote share errors correlated across parties, and probably switch from party based to incumbency based errors, just for the sake of consistency. I feel like given all my exposition earlier in this post, this is fairly self-explanatory 
+
+3. Include even more covariates for the turnout and vote share models. In terms of data I would want to add, I would start with data on how urban and rural states are, along with economic data. The urban and rural data is meant to control for the ongoing trend of serious splits between urban and rural areas between states. Something like the fraction of the population of a state in cities could make a good choice. Second, I would want to include more economic data, primarily longer term information like housing prices, long term income growth, and what industries are prevalent. The reason I want to include longer term data is to give more of a sense of class divides: it should be apparent that Massachusetts is a wealthier state than Alabama, and it should be apparent that Minnesota is wealthier than it's midwestern neighbors. 
+
+4. I should have regularized the turnout and vote share models once I had all the inputs. The explanation for this is relatively straightforward: with so much data, I would run the risk of overfitting, so regularization could help fix this problem. Parsimonious models tend to generalize better, and given all the things that make 2020 unique, generalization is extremely important. 
+
+5. Check to make sure all the assumptions built into the many stages of my model actually make sense. This is a broad category, and probably the hardest thing to change. This would include spending more time making sure that the assumptions required for poisson and binomial regressions are met, and making sure that the cumulative variances of the many random variables work out as well. I know that for the turnout model, the assumptions were most certainly not met, so exploring other avenues there would have been a good idea. 
+
+This list is probably not exhaustive, but it is clear that my model left a lot to be desired. Looking back, I am happy with the model that I built, but recognize that there were many shortcomings. I think in a lot of ways, my biggest problem was a lack of time. I started on this final model about a week before the election took place, and given the complexity of my model, that was not nearly enough time to check every last detail. 
+
+
+[^1]: One exception is New York, where vote counting has been extremely slow. It is likely that it will be much closer to the trend line once all votes are counted. 
+
+[^2]: At one point while I was building my prediction model, I toyed with the idea of including early voting rates in the turnout prediction model, but decided to avoid it. My feeling is that if I were to include that information, it would have forecasted the massive voting surge. 
+
+[^3]: Except for getting the winner right, I suppose. But that lacks nuance. 
+
+[^4]: There is an argument to be made that using longer term data could be problematic due to party re-alignment, changes in media consumption, and suffrage changes. 
+
+[^5]: This almost exactly fits with the difference for Biden in my model's predicted national popular vote shares and the FiveThirtyEight polling data on which it was based. Interestingly, it does not at all fit with Trump's predicted vote share versus the polls. 
+

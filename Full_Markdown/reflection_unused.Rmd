@@ -1,0 +1,29 @@
+---
+title: "48 Hours Later"
+author: "Samuel Thau"
+date: "11/1/2020"
+output:
+  rmarkdown::html_document:
+    theme: cerulean
+    
+knit: (function(inputFile, encoding) {
+  rmarkdown::render(inputFile, encoding = encoding, output_dir = "../Posts/") })    
+
+---
+
+## A Quick Assessment
+
+Roughly 48 hours after the polls closed, it's pretty clear that my prediction was wrong on two dimensionis: first, it was way, way too certain, and second, there were a number of states (most notably Florida, South Carolina, and Ohio) that were called incorrectly and several with very different margins. 
+
+I wanted to do a quick check on one possibility for something that went wrong, in the uncertainty category. As explained in this [blog post](https://www.hodp.org/project/hodp-election-models-lots-of-uncertainty-likely-a-biden-win) for Harvard Open Data Project, my model had relavtily little volatility in the vote shares in each state. Becuase I was using variance in the polling averages, rather than individual polls, there was very little variance in vote shares for either candidate. 
+
+I was curious, so I re-ran my model, and instead of using state level standard deviations from the polling averages, I used state level standard deviations from the individual polls. As a quick reminder, this enters the model through the covariance matrix for draws of vote shares for each candidate, by scaling the similarity matrix. For most states, this meant that the standard deviations increased by roughly 5 times, as there was more overall variance across all polls. 
+
+## With Greater Variance, Comes Similar Results
+For the sake of brevity, I'll primarily look at the overall outocmes, rather than focusing on any individual states. We can first look at the distribution of electoral results, and compare to the previoius version. 
+
+
+
+
+
+
