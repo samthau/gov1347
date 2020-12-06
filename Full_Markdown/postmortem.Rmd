@@ -488,7 +488,7 @@ Second, I spent a lot of time getting covariance between the results from differ
 Unfortunately for me, that's a very accurate description of what I did for my model. Gelman made the point that swings in vote shares between states generally should not have negative correlations, something that did occur in my model. In addition, for the biggest swing, Gelman makes the point that they should be national, something that I agree with. As mentioned previously, this is something that is correctable with more time, something I unfortunately did not have. Combined to the problems I had with national polling errors, this all is a recipe for some very strange behavior.  
 
 ## Potential Checks
-While unfortunately I do not have time to actually conduct all of these checks, I'll hopefully take a look at a couple in a later post over Thanksgiving break. Below is a non-exhaustive list of everything I could think of to try to improve the model:
+Below is a non-exhaustive list of everything I could think of to try to improve the model:
 
 1. Start by validating the current edition of the model on previous elections. For a number of reasons, this election was unique, and this would give a good sense of if the problems with my model were idiosyncratic to this year or a more consistent problem. Ideally, I would take a look at all the same accuracy metrics I looked at in this post. 
 
