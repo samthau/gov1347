@@ -9,7 +9,7 @@ This is my prediction for the 2020 election. I build a probabilistic model that 
 The postmortem of my model, assessing what went right, what went wrong, and what I should have done to correct my mistakes.
 
 ## [3. Narrative Assessment: The Urban-Rural Divide](Posts/narrative.html)
-A look at the urban-rural divide, and if it increased during the 2020 election. 
+A look at the urban-rural divide, and if it increased during the 2020 election. Discussion of the urban-rural divide itself, and how it relates to other factors about the election. 
 
 # [Pre-Election Blog Posts](https://samthau.github.io/gov1347/)
 
